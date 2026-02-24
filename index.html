@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Online Exam System - Electrical Engineering</title>
+<style>
+  body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    margin: 0; padding: 0;
+    background: linear-gradient(135deg,#d5b3d2,#0ca16d,#c8c7d2);
+    background-size: 400% 400%;
+    animation: gradient 10s ease infinite;
+    color: #fff;
+  }
+  @keyframes gradient {
+    0% {background-position: 0% 50%;}
+    50% {background-position: 100% 50%;}
+    100% {background-position: 0% 50%;}
+  }
+  .container {
+    max-width: 800px;
+    margin: 50px auto;
+    background: rgba(52, 74, 28, 0.8);
+    padding: 30px;
+    border-radius: 30px;
+    box-shadow: 0 10px 30px rgba(18, 5, 5, 0.5);
+  }
+  input, select, button {
+    width: 100%;
+    padding: 12px;
+    margin: 8px 0;
+    border: none;
+    border-radius: 10px;
+    box-sizing: border-box;
+  }
+  button {
+    background: #510762;
+    color: #fff;
+    font-weight: bold;
+    cursor: pointer;
+    transition: 0.3s;
+  }
+  button:hover { background: #009e8e; transform: translateY(-2px); }
+  button:disabled { background: #555 !important; cursor: not-allowed; }
+  .hidden {display: none;}
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background: #fff;
+    color: #000;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+  .question-block {
+    background: rgba(255,255,255,0.1);
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 15px;
+    border-left: 5px solid #0ca16d;
+  }
+  img { width:80px; height:80px; border-radius:50%; display: block; margin: 0 auto 10px; }
+  .management-card {
+    background: rgba(255,255,255,0.05);
+    padding: 15px;
+    border-radius: 15px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  /* Style for the Final Score View */
+  .score-card {
+    text-align: center;
+    padding: 40px;
+    background: #fff;
+    color: #333;
+    border-radius: 20px;
+    margin-top: 20px;
+  }
+  .score-circle {
+    font-size: 48px;
+    font-weight: bold;
+    color: #0ca16d;
+    margin: 20px 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="container" id="loginContainer">
+  <img src="aastu-logo.png" alt="University Logo">
+  <h2 style="text-align:center;">Online Exam System</h2>
+  
+  <h3>Instructor Login</h3>
+  <input type="password" id="instructorPassword" placeholder="Enter Password">
+  <button id="instructorLoginBtn">Login</button>
+  
+  <hr>
+  
+  <h3>Student Login</h3>
+  <label>Select Section:</label>
+  <select id="sectionSelectStudent">
+    <option value="">-- Choose Section --</option>
+    <option value="Section_C">Section C</option>
+    <option value="Section_D">Section D</option>
+    <option value="Section_E">Section E</option>
+  </select>
+
+  <label>Select Your Name:</label>
+  <select id="studentSelect">
+    <option value="">-- Select Section First --</option>
+  </select>
+  
+  <label>Select Exam:</label>
+  <select id="studentExamSelect">
+    <option value="Engineering Thermodynamics">Engineering Thermodynamics</option>
+    <option value="Turbomachinery">Turbomachinery</option>
+    <option value="Fluid mechanics">Fluid mechanics</option>
+  </select>
+  <button id="studentLoginBtn">Login as Student</button>
+</div>
+
+<div class="container hidden" id="instructorPanel">
+  <div style="display:flex; justify-content: space-between; align-items: center;">
+    <h2>Instructor Dashboard</h2>
+    <button id="logoutInstructor" style="width: auto; background: #e74c3c;">Logout</button>
+  </div>
+  
+  <div class="management-card">
+    <h3>Student List Management</h3>
+    <label>Target Section:</label>
+    <select id="uploadSectionSelect">
+      <option value="Section_C">Section C</option>
+      <option value="Section_D">Section D</option>
+      <option value="Section_E">Section E</option>
+    </select>
+    <input type="file" id="csvFileInput" accept=".csv" style="background: #333; color: white;">
+    <button id="uploadCsvBtn" style="background: #2980b9;">Update Student List from CSV</button>
+  </div>
+
+  <div class="management-card">
+    <h3>Exam Questions</h3>
+    <select id="examSelect">
+      <option value="">-- Choose Subject --</option>
+      <option value="Engineering Thermodynamics">Engineering Thermodynamics</option>
+      <option value="Turbomachinery">Turbomachinery</option>
+      <option value="Fluid mechanics">Fluid mechanics</option>
+    </select>
+    <div id="questionsContainer"></div>
+    <button id="saveExamBtn">Save All Changes</button>
+  </div>
+  
+  <hr>
+  <h3>Student Results</h3>
+  <button id="viewResultsBtn" style="background: #2980b9;">Refresh Results</button>
+  <div id="studentResults"></div>
+</div>
+
+<div class="container hidden" id="studentExamPage">
+  <div style="display:flex; justify-content: space-between;">
+    <h2 id="examTitle"></h2>
+    <div id="studentInfoDisplay" style="text-align: right; color: #0ca16d; font-weight: bold;"></div>
+  </div>
+  <div id="examQuestions"></div>
+  <button id="submitExamBtn" style="background: #27ae60;">Submit Exam</button>
+  
+  <div id="finalScoreView" class="hidden">
+      <div class="score-card">
+          <h3>Exam Completed!</h3>
+          <p>Your Final Score is:</p>
+          <div class="score-circle" id="displayScoreValue">0 / 0</div>
+          <p>The results have been sent to your instructor.</p>
+          <button onclick="location.reload()" style="background:#510762; width: 200px;">Back to Home</button>
+      </div>
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
+  import { getDatabase, ref, set, get, child, push } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDFjP0XksVdL_8dtbzf4TujRzGSpH7hcgI",
+    authDomain: "exam-67a68.firebaseapp.com",
+    projectId: "exam-67a68",
+    storageBucket: "exam-67a68.firebasestorage.app",
+    messagingSenderId: "8047123325",
+    appId: "1:8047123325:web:438c018b4809dfb92e8a14",
+    measurementId: "G-5PSY50N9C0"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app); 
+  const instructorKey = "Amlakeesraiel2112@@@";
+
+  let fullSectionData = []; 
+  let currentSearch = "";
+  let searchTimer;
+
+  function renderOptions(list) {
+    const sel = document.getElementById("studentSelect");
+    sel.innerHTML = '<option value="">-- Select Your Name --</option>';
+    list.forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = JSON.stringify({id: s.id, fName: s.firstName, lName: s.lastName});
+      opt.textContent = `${s.firstName} ${s.lastName} (${s.id})`;
+      sel.appendChild(opt);
+    });
+  }
+
+  document.getElementById("studentSelect").onkeydown = (e) => {
+    if (e.key.length === 1 || e.key === "Backspace") {
+      if (e.key === "Backspace") {
+        currentSearch = currentSearch.slice(0, -1);
+      } else {
+        currentSearch += e.key.toLowerCase();
+      }
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        const filtered = fullSectionData.filter(s => 
+          s.firstName.toLowerCase().includes(currentSearch) || 
+          s.lastName.toLowerCase().includes(currentSearch) ||
+          s.id.toLowerCase().includes(currentSearch)
+        );
+        renderOptions(filtered);
+      }, 300);
+    }
+  };
+
+  document.getElementById("studentSelect").onblur = () => { currentSearch = ""; };
+
+  document.getElementById("uploadCsvBtn").onclick = () => {
+    const fileInput = document.getElementById("csvFileInput");
+    const section = document.getElementById("uploadSectionSelect").value;
+    const file = fileInput.files[0];
+    if (!file) return alert("Please select a CSV file.");
+    
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const lines = e.target.result.split(/\r?\n/);
+      const students = {};
+      let count = 0;
+
+      lines.forEach(line => {
+        const cols = line.split(",").map(c => c.trim().replace(/"/g, ""));
+        let idIdx = -1;
+        for(let j=0; j<cols.length; j++) {
+           if(cols[j] && cols[j].includes("/") && cols[j].length > 5) {
+              idIdx = j;
+              break;
+           }
+        }
+        if (idIdx !== -1) {
+          let id = cols[idIdx];
+          let fName = "", lName = "";
+          if (idIdx === 3) { fName = cols[1]; lName = cols[2]; } 
+          else if (idIdx === 0 || idIdx === 1) { fName = cols[idIdx + 1]; lName = cols[idIdx + 2] || ""; }
+          if (id && fName) {
+            const safeKey = id.replace(/\//g, "_");
+            students[safeKey] = { id, firstName: fName, lastName: lName };
+            count++;
+          }
+        }
+      });
+      if (count > 0) {
+        await set(ref(db, "studentList/" + section), students);
+        alert(`Successfully imported ${count} students!`);
+      } else {
+        alert("Could not find student data. Please check the CSV format.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  document.getElementById("sectionSelectStudent").onchange = async (e) => {
+    const section = e.target.value;
+    if (!section) return;
+    currentSearch = ""; 
+    const snap = await get(child(ref(db), "studentList/" + section));
+    if(snap.exists()){
+      fullSectionData = Object.values(snap.val());
+      renderOptions(fullSectionData);
+    } else {
+      fullSectionData = [];
+      renderOptions([]);
+    }
+  };
+
+  document.getElementById("instructorLoginBtn").onclick = () => {
+    if (document.getElementById("instructorPassword").value === instructorKey) {
+      document.getElementById("loginContainer").classList.add("hidden");
+      document.getElementById("instructorPanel").classList.remove("hidden");
+    } else alert("Wrong Password");
+  };
+
+  document.getElementById("studentLoginBtn").onclick = async () => {
+    const raw = document.getElementById("studentSelect").value;
+    const exam = document.getElementById("studentExamSelect").value;
+    if (!raw) return alert("Select your name");
+    
+    const data = JSON.parse(raw);
+    const resultsSnap = await get(child(ref(db), "results"));
+    if (resultsSnap.exists()) {
+      const alreadyDone = Object.values(resultsSnap.val()).some(r => r.id === data.id && r.exam === exam);
+      if (alreadyDone) return alert("Access Denied: Exam already submitted.");
+    }
+
+    const examSnap = await get(child(ref(db), "exams/" + exam));
+    if (!examSnap.exists()) return alert("Exam not found.");
+
+    document.getElementById("loginContainer").classList.add("hidden");
+    document.getElementById("studentExamPage").classList.remove("hidden");
+    document.getElementById("examTitle").innerText = exam;
+    document.getElementById("studentInfoDisplay").innerText = `${data.fName} ${data.lName} (${data.id})`;
+    
+    const questions = examSnap.val();
+    const qContainer = document.getElementById("examQuestions");
+    qContainer.innerHTML = "";
+    questions.forEach((q, i) => {
+      qContainer.innerHTML += `
+        <div class="question-block">
+          <p><strong>${i+1}. ${q.question}</strong></p>
+          ${q.options.map((opt, j) => `<label style="display:block; margin: 8px 0;"><input type="radio" name="q${i}" value="${j+1}"> ${["A","B","C","D"][j]}. ${opt}</label>`).join('')}
+        </div>`;
+    });
+
+    document.getElementById("submitExamBtn").onclick = async () => {
+      if(!confirm("Final submission?")) return;
+      let score = 0;
+      questions.forEach((q, i) => {
+        const sel = document.querySelector(`input[name="q${i}"]:checked`);
+        if (sel && parseInt(sel.value) === q.answer) score++;
+      });
+      
+      // Upload result to Database
+      await push(ref(db, "results"), { 
+        firstName: data.fName, lastName: data.lName, id: data.id, 
+        exam, score, total: questions.length, timestamp: new Date().toLocaleString()
+      });
+
+      // --- SHOW SCORE TO STUDENT ---
+      // 1. Hide the questions and submit button
+      document.getElementById("examQuestions").classList.add("hidden");
+      document.getElementById("submitExamBtn").classList.add("hidden");
+      
+      // 2. Update the text in the score card
+      document.getElementById("displayScoreValue").innerText = `${score} / ${questions.length}`;
+      
+      // 3. Show the score card
+      document.getElementById("finalScoreView").classList.remove("hidden");
+      
+      alert(`Submission Successful! Your Score: ${score}/${questions.length}`);
+      // (The location.reload() is now moved to the button inside the score card)
+    };
+  };
+
+  document.getElementById("viewResultsBtn").onclick = async () => {
+    const container = document.getElementById("studentResults");
+    const snap = await get(child(ref(db), "results"));
+    if (snap.exists()) {
+      let html = `<table><tr><th>Name</th><th>ID</th><th>Exam</th><th>Score</th></tr>`;
+      Object.values(snap.val()).forEach(r => {
+        html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.exam}</td><td>${r.score}/${r.total}</td></tr>`;
+      });
+      container.innerHTML = html + "</table>";
+    }
+  };
+
+  document.getElementById("logoutInstructor").onclick = () => location.reload();
+</script>
+</body>
+</html>
