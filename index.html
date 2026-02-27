@@ -191,15 +191,12 @@
 
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app); 
-  const instructorKey = "Amlakeesraiel2112@@@";
-  
-  // PASSWORD FOR STUDENTS TO ENTER THE EXAM
-  const EXAM_ATTEMPT_PASSWORD = "0217"; 
 
   let fullSectionData = []; 
   let currentSearch = "";
   let searchTimer;
 
+  // --- HELPER: RENDER LIST ---
   function renderOptions(list) {
     const sel = document.getElementById("studentSelect");
     sel.innerHTML = '<option value="">-- Select Your Name --</option>';
@@ -211,6 +208,7 @@
     });
   }
 
+  // --- SEARCH LOGIC ---
   document.getElementById("studentSelect").onkeydown = (e) => {
     if (e.key.length === 1 || e.key === "Backspace") {
       if (e.key === "Backspace") {
@@ -232,97 +230,42 @@
 
   document.getElementById("studentSelect").onblur = () => { currentSearch = ""; };
 
-  document.getElementById("uploadCsvBtn").onclick = () => {
-    const fileInput = document.getElementById("csvFileInput");
-    const section = document.getElementById("uploadSectionSelect").value;
-    const file = fileInput.files[0];
-    if (!file) return alert("Please select a CSV file.");
+  // --- INSTRUCTOR LOGIN (FETCH FROM DATABASE) ---
+  document.getElementById("instructorLoginBtn").onclick = async () => {
+    const enteredPass = document.getElementById("instructorPassword").value;
+    const snap = await get(child(ref(db), "adminConfig/instructorKey"));
     
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const lines = e.target.result.split(/\r?\n/);
-      const students = {};
-      let count = 0;
-
-      lines.forEach(line => {
-        const cols = line.split(",").map(c => c.trim().replace(/"/g, ""));
-        let idIdx = -1;
-        for(let j=0; j<cols.length; j++) {
-           if(cols[j] && cols[j].includes("/") && cols[j].length > 5) {
-              idIdx = j;
-              break;
-           }
-        }
-        if (idIdx !== -1) {
-          let id = cols[idIdx];
-          let fName = "", lName = "";
-          if (idIdx === 3) { fName = cols[1]; lName = cols[2]; } 
-          else if (idIdx === 0 || idIdx === 1) { fName = cols[idIdx + 1]; lName = cols[idIdx + 2] || ""; }
-          if (id && fName) {
-            const safeKey = id.replace(/\//g, "_");
-            students[safeKey] = { id, firstName: fName, lastName: lName };
-            count++;
-          }
-        }
-      });
-      if (count > 0) {
-        await set(ref(db, "studentList/" + section), students);
-        alert(`Successfully imported ${count} students!`);
-      } else {
-        alert("Could not find student data. Please check the CSV format.");
-      }
-    };
-    reader.readAsText(file);
-  };
-
-  document.getElementById("sectionSelectStudent").onchange = async (e) => {
-    const section = e.target.value;
-    if (!section) return;
-    currentSearch = ""; 
-    const snap = await get(child(ref(db), "studentList/" + section));
-    if(snap.exists()){
-      fullSectionData = Object.values(snap.val());
-      renderOptions(fullSectionData);
+    if (snap.exists() && enteredPass === snap.val()) {
+      document.getElementById("loginContainer").classList.add("hidden");
+      document.getElementById("instructorPanel").classList.remove("hidden");
     } else {
-      fullSectionData = [];
-      renderOptions([]);
+      alert("Unauthorized Access!");
     }
   };
 
-  document.getElementById("instructorLoginBtn").onclick = () => {
-    if (document.getElementById("instructorPassword").value === instructorKey) {
-      document.getElementById("loginContainer").classList.add("hidden");
-      document.getElementById("instructorPanel").classList.remove("hidden");
-    } else alert("Wrong Password");
-  };
-
+  // --- STUDENT LOGIN (FETCH PASS FROM DATABASE) ---
   document.getElementById("studentLoginBtn").onclick = async () => {
     const raw = document.getElementById("studentSelect").value;
     const exam = document.getElementById("studentExamSelect").value;
     if (!raw) return alert("Select your name");
 
-    // --- PASSWORD CHECK BEFORE STARTING ---
+    const passSnap = await get(child(ref(db), "examConfig/studentExamPassword"));
+    const correctPass = passSnap.exists() ? passSnap.val() : "";
+
     const userInput = prompt(`Enter the password for ${exam}:`);
-    if (userInput === null) return; // Cancelled
-    if (userInput !== EXAM_ATTEMPT_PASSWORD) {
-        alert("Incorrect Exam Password!");
-        return;
-    }
+    if (userInput === null) return; 
+    if (userInput !== correctPass) return alert("Incorrect Exam Password!");
 
     const data = JSON.parse(raw);
-    
-    // Check if exam exists first
     const examSnap = await get(child(ref(db), "exams/" + exam));
-    if (!examSnap.exists()) return alert("Exam not found. Please contact your instructor.");
+    if (!examSnap.exists()) return alert("Exam questions not found.");
 
-    // Check if already submitted
     const resultsSnap = await get(child(ref(db), "results"));
     if (resultsSnap.exists()) {
       const alreadyDone = Object.values(resultsSnap.val()).some(r => r.id === data.id && r.exam === exam);
-      if (alreadyDone) return alert("Access Denied: You have already submitted this exam.");
+      if (alreadyDone) return alert("Access Denied: Already submitted.");
     }
 
-    // Load Exam
     document.getElementById("loginContainer").classList.add("hidden");
     document.getElementById("studentExamPage").classList.remove("hidden");
     document.getElementById("examTitle").innerText = exam;
@@ -340,7 +283,7 @@
     });
 
     document.getElementById("submitExamBtn").onclick = async () => {
-      if(!confirm("Are you sure you want to submit?")) return;
+      if(!confirm("Submit final answers?")) return;
       let score = 0;
       questions.forEach((q, i) => {
         const sel = document.querySelector(`input[name="q${i}"]:checked`);
@@ -356,9 +299,42 @@
       document.getElementById("submitExamBtn").classList.add("hidden");
       document.getElementById("displayScoreValue").innerText = `${score} / ${questions.length}`;
       document.getElementById("finalScoreView").classList.remove("hidden");
-      
-      alert(`Submission Successful!`);
+      alert("Submission Successful!");
     };
+  };
+
+  // --- DATA LOADING & CSV ---
+  document.getElementById("sectionSelectStudent").onchange = async (e) => {
+    const section = e.target.value;
+    if (!section) return;
+    const snap = await get(child(ref(db), "studentList/" + section));
+    fullSectionData = snap.exists() ? Object.values(snap.val()) : [];
+    renderOptions(fullSectionData);
+  };
+
+  document.getElementById("uploadCsvBtn").onclick = () => {
+    const fileInput = document.getElementById("csvFileInput");
+    const section = document.getElementById("uploadSectionSelect").value;
+    const file = fileInput.files[0];
+    if (!file) return alert("Select CSV");
+    
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const lines = e.target.result.split(/\r?\n/);
+      const students = {};
+      lines.forEach(line => {
+        const cols = line.split(",").map(c => c.trim().replace(/"/g, ""));
+        let idIdx = -1;
+        for(let j=0; j<cols.length; j++) if(cols[j]?.includes("/") && cols[j].length > 5) idIdx = j;
+        if (idIdx !== -1) {
+          let id = cols[idIdx], fName = cols[1], lName = cols[2];
+          if (id && fName) students[id.replace(/\//g, "_")] = { id, firstName: fName, lastName: lName };
+        }
+      });
+      await set(ref(db, "studentList/" + section), students);
+      alert("Imported!");
+    };
+    reader.readAsText(file);
   };
 
   document.getElementById("viewResultsBtn").onclick = async () => {
