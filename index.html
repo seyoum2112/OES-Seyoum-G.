@@ -69,7 +69,6 @@
     margin-bottom: 20px;
     border: 1px solid rgba(255,255,255,0.1);
   }
-  /* Style for the Final Score View */
   .score-card {
     text-align: center;
     padding: 40px;
@@ -193,6 +192,9 @@
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app); 
   const instructorKey = "Amlakeesraiel2112@@@";
+  
+  // PASSWORD FOR STUDENTS TO ENTER THE EXAM
+  const EXAM_ATTEMPT_PASSWORD = "0217"; 
 
   let fullSectionData = []; 
   let currentSearch = "";
@@ -298,17 +300,29 @@
     const raw = document.getElementById("studentSelect").value;
     const exam = document.getElementById("studentExamSelect").value;
     if (!raw) return alert("Select your name");
-    
+
+    // --- PASSWORD CHECK BEFORE STARTING ---
+    const userInput = prompt(`Enter the password for ${exam}:`);
+    if (userInput === null) return; // Cancelled
+    if (userInput !== EXAM_ATTEMPT_PASSWORD) {
+        alert("Incorrect Exam Password!");
+        return;
+    }
+
     const data = JSON.parse(raw);
+    
+    // Check if exam exists first
+    const examSnap = await get(child(ref(db), "exams/" + exam));
+    if (!examSnap.exists()) return alert("Exam not found. Please contact your instructor.");
+
+    // Check if already submitted
     const resultsSnap = await get(child(ref(db), "results"));
     if (resultsSnap.exists()) {
       const alreadyDone = Object.values(resultsSnap.val()).some(r => r.id === data.id && r.exam === exam);
-      if (alreadyDone) return alert("Access Denied: Exam already submitted.");
+      if (alreadyDone) return alert("Access Denied: You have already submitted this exam.");
     }
 
-    const examSnap = await get(child(ref(db), "exams/" + exam));
-    if (!examSnap.exists()) return alert("Exam not found.");
-
+    // Load Exam
     document.getElementById("loginContainer").classList.add("hidden");
     document.getElementById("studentExamPage").classList.remove("hidden");
     document.getElementById("examTitle").innerText = exam;
@@ -326,32 +340,24 @@
     });
 
     document.getElementById("submitExamBtn").onclick = async () => {
-      if(!confirm("Final submission?")) return;
+      if(!confirm("Are you sure you want to submit?")) return;
       let score = 0;
       questions.forEach((q, i) => {
         const sel = document.querySelector(`input[name="q${i}"]:checked`);
         if (sel && parseInt(sel.value) === q.answer) score++;
       });
       
-      // Upload result to Database
       await push(ref(db, "results"), { 
         firstName: data.fName, lastName: data.lName, id: data.id, 
         exam, score, total: questions.length, timestamp: new Date().toLocaleString()
       });
 
-      // --- SHOW SCORE TO STUDENT ---
-      // 1. Hide the questions and submit button
       document.getElementById("examQuestions").classList.add("hidden");
       document.getElementById("submitExamBtn").classList.add("hidden");
-      
-      // 2. Update the text in the score card
       document.getElementById("displayScoreValue").innerText = `${score} / ${questions.length}`;
-      
-      // 3. Show the score card
       document.getElementById("finalScoreView").classList.remove("hidden");
       
-      alert(`Submission Successful! Your Score: ${score}/${questions.length}`);
-      // (The location.reload() is now moved to the button inside the score card)
+      alert(`Submission Successful!`);
     };
   };
 
@@ -370,5 +376,4 @@
   document.getElementById("logoutInstructor").onclick = () => location.reload();
 </script>
 </body>
-
 </html>
