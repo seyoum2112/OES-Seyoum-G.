@@ -230,7 +230,7 @@
 
   document.getElementById("studentSelect").onblur = () => { currentSearch = ""; };
 
-  // --- INSTRUCTOR LOGIN (FETCH FROM DATABASE) ---
+  // --- INSTRUCTOR LOGIN (FETCH FROM adminConfig/instructorKey) ---
   document.getElementById("instructorLoginBtn").onclick = async () => {
     const enteredPass = document.getElementById("instructorPassword").value;
     const snap = await get(child(ref(db), "adminConfig/instructorKey"));
@@ -243,16 +243,21 @@
     }
   };
 
-  // --- STUDENT LOGIN (FETCH PASS FROM DATABASE) ---
+  // --- STUDENT LOGIN (FETCH SECTION PASS FROM examConfig) ---
   document.getElementById("studentLoginBtn").onclick = async () => {
+    const section = document.getElementById("sectionSelectStudent").value;
     const raw = document.getElementById("studentSelect").value;
     const exam = document.getElementById("studentExamSelect").value;
-    if (!raw) return alert("Select your name");
+    
+    if (!section || !raw) return alert("Select section and name");
 
-    const passSnap = await get(child(ref(db), "examConfig/studentExamPassword"));
-    const correctPass = passSnap.exists() ? passSnap.val() : "";
+    // Fetch the password for the specific section selected
+    const passSnap = await get(child(ref(db), `examConfig/${section}`));
+    const correctPass = passSnap.exists() ? passSnap.val().toString() : null;
 
-    const userInput = prompt(`Enter the password for ${exam}:`);
+    if (!correctPass) return alert("Exam password for this section is not set.");
+
+    const userInput = prompt(`Enter the password for ${section}:`);
     if (userInput === null) return; 
     if (userInput !== correctPass) return alert("Incorrect Exam Password!");
 
@@ -353,4 +358,3 @@
 </script>
 </body>
 </html>
-
