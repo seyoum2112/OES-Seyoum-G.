@@ -97,6 +97,9 @@
   }
   .nav-controls { display: flex; gap: 10px; margin-top: 20px; }
   .btn-nav { background: #2980b9; }
+  /* Security Style: Masks the dropdown answer in instructor panel */
+  .q-ans { background: #333; color: #333; }
+  .q-ans:focus { color: #fff; }
 </style>
 </head>
 <body>
@@ -172,7 +175,7 @@
     </select>
     <button id="addNewQuestionBtn" class="btn-add">+ Add New Question</button>
     <div id="questionsContainer"></div>
-    <button id="saveExamBtn">Save All Changes</button>
+    <button id="saveExamBtn">Save All Changes (Secure)</button>
   </div>
   
   <hr>
@@ -229,7 +232,15 @@
   let examTimer;
   let currentQuestionIndex = 0;
   let totalQuestions = 0;
-  let startTime; // To track duration
+  let startTime; 
+
+  // --- SECURITY: HASHING HELPER ---
+  const SECRET_SALT = "AASTU_EE_SECURE_2026"; // Secret salt key
+  async function hashData(value) {
+    const msgUint8 = new TextEncoder().encode(value.toString() + SECRET_SALT);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
 
   // --- UI HELPER: CREATE QUESTION HTML ---
   function createQuestionBlock(qData = null) {
@@ -245,12 +256,12 @@
         <input type="text" class="opt-3" value="${qData ? qData.options[2] : ''}" placeholder="Option C">
         <input type="text" class="opt-4" value="${qData ? qData.options[3] : ''}" placeholder="Option D">
       </div>
-      <p>Correct Answer Index:</p>
+      <p>Correct Answer Index (Hidden):</p>
       <select class="q-ans">
-        <option value="1" ${qData && qData.answer == 1 ? 'selected' : ''}>A</option>
-        <option value="2" ${qData && qData.answer == 2 ? 'selected' : ''}>B</option>
-        <option value="3" ${qData && qData.answer == 3 ? 'selected' : ''}>C</option>
-        <option value="4" ${qData && qData.answer == 4 ? 'selected' : ''}>D</option>
+        <option value="1">A</option>
+        <option value="2">B</option>
+        <option value="3">C</option>
+        <option value="4">D</option>
       </select>
     `;
     return block;
@@ -287,15 +298,19 @@
     if (!examName) return alert("Select a subject first");
     const blocks = document.querySelectorAll("#questionsContainer .question-block");
     const updatedExams = [];
-    blocks.forEach(b => {
+    
+    for (const b of blocks) {
+      const rawAns = b.querySelector(".q-ans").value;
+      const secureAns = await hashData(rawAns); // ENCRYPT ANSWER
+      
       updatedExams.push({
         question: b.querySelector(".q-text").value,
         options: [b.querySelector(".opt-1").value, b.querySelector(".opt-2").value, b.querySelector(".opt-3").value, b.querySelector(".opt-4").value],
-        answer: parseInt(b.querySelector(".q-ans").value)
+        answer: secureAns
       });
-    });
+    }
     await set(ref(db, "exams/" + examName), updatedExams);
-    alert("Exam data saved successfully!");
+    alert("Exam data saved with Hashed Security!");
   };
 
   function shuffleArray(array) {
@@ -321,41 +336,39 @@
   document.getElementById("nextBtn").onclick = () => { if (currentQuestionIndex < totalQuestions - 1) { currentQuestionIndex++; showQuestion(currentQuestionIndex); } };
   document.getElementById("prevBtn").onclick = () => { if (currentQuestionIndex > 0) { currentQuestionIndex--; showQuestion(currentQuestionIndex); } };
 
-  // --- STUDENT LOGIN (WITH TIME VALIDATION) ---
+  // --- STUDENT LOGIN ---
   document.getElementById("studentLoginBtn").onclick = async () => {
     const section = document.getElementById("sectionSelectStudent").value;
     const raw = document.getElementById("studentSelect").value;
     const exam = document.getElementById("studentExamSelect").value;
     if (!section || !raw) return alert("Select section and name");
 
-    // Check Exam Window
     const windowSnap = await get(child(ref(db), "examWindow"));
     if(windowSnap.exists()){
         const now = new Date();
         const start = new Date(windowSnap.val().start);
         const end = new Date(windowSnap.val().end);
-        if(now < start) return alert(`The exam has not started yet. Starts at: ${start.toLocaleString()}`);
-        if(now > end) return alert("The exam window has closed. You cannot take the test now.");
+        if(now < start) return alert(`Not started yet. Starts at: ${start.toLocaleString()}`);
+        if(now > end) return alert("Exam window has closed.");
     }
 
     const passSnap = await get(child(ref(db), `examConfig/${section}`));
     const correctPass = passSnap.exists() ? passSnap.val().toString() : null;
-    if (!correctPass) return alert("Exam password for this section is not set.");
+    if (!correctPass) return alert("Exam password not set.");
 
     const userInput = prompt(`Enter the password for ${section}:`);
     if (userInput !== correctPass) return alert("Incorrect Exam Password!");
 
     const data = JSON.parse(raw);
     const examSnap = await get(child(ref(db), "exams/" + exam));
-    if (!examSnap.exists()) return alert("Exam questions not found.");
+    if (!examSnap.exists()) return alert("Questions not found.");
 
     document.getElementById("loginContainer").classList.add("hidden");
     document.getElementById("studentExamPage").classList.remove("hidden");
     document.getElementById("examTitle").innerText = exam;
     document.getElementById("studentInfoDisplay").innerText = `${data.fName} ${data.lName} (${data.id})`;
     
-    startTime = new Date(); // Start the record
-
+    startTime = new Date();
     const questions = examSnap.val();
     shuffleArray(questions);
     totalQuestions = questions.length;
@@ -376,14 +389,12 @@
     showQuestion(0);
 
     let timeRemaining = 600; 
-    const timerDisplay = document.getElementById("timerDisplay");
     examTimer = setInterval(() => {
         let mins = Math.floor(timeRemaining / 60);
         let secs = timeRemaining % 60;
-        timerDisplay.innerText = `Time Remaining: ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        document.getElementById("timerDisplay").innerText = `Time Remaining: ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         if (timeRemaining <= 0) {
             clearInterval(examTimer);
-            alert("Time is up! Submitting automatically.");
             document.getElementById("submitExamBtn").click();
         }
         timeRemaining--;
@@ -395,10 +406,14 @@
       const durationMin = Math.round((endTime - startTime) / 60000);
 
       let score = 0;
-      questions.forEach((q, i) => {
+      // SECURE SCORING: Hash choice then compare
+      for (let i = 0; i < questions.length; i++) {
         const sel = document.querySelector(`input[name="q${i}"]:checked`);
-        if (sel && parseInt(sel.value) === q.answer) score++;
-      });
+        if (sel) {
+          const hashedSelection = await hashData(sel.value);
+          if (hashedSelection === questions[i].answer) score++;
+        }
+      }
       
       await push(ref(db, "results"), { 
         firstName: data.fName, lastName: data.lName, id: data.id, 
@@ -424,7 +439,7 @@
     if (snap.exists() && enteredPass === snap.val()) {
       document.getElementById("loginContainer").classList.add("hidden");
       document.getElementById("instructorPanel").classList.remove("hidden");
-    } else { alert("Unauthorized Access!"); }
+    } else { alert("Unauthorized!"); }
   };
 
   document.getElementById("sectionSelectStudent").onchange = async (e) => {
@@ -472,9 +487,9 @@
     const container = document.getElementById("studentResults");
     const snap = await get(child(ref(db), "results"));
     if (snap.exists()) {
-      let html = `<table><tr><th>Name</th><th>ID</th><th>Exam</th><th>Time Spent</th><th>Score</th></tr>`;
+      let html = `<table><tr><th>Name</th><th>ID</th><th>Exam</th><th>Score</th></tr>`;
       Object.values(snap.val()).forEach(r => {
-        html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.exam}</td><td>${r.timeSpent || 'N/A'}</td><td>${r.score}/${r.total}</td></tr>`;
+        html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.exam}</td><td>${r.score}/${r.total}</td></tr>`;
       });
       container.innerHTML = html + "</table>";
     }
