@@ -97,7 +97,6 @@
   }
   .nav-controls { display: flex; gap: 10px; margin-top: 20px; }
   .btn-nav { background: #2980b9; }
-  /* Security Style: Masks the dropdown answer in instructor panel */
   .q-ans { background: #333; color: #333; }
   .q-ans:focus { color: #fff; }
 </style>
@@ -179,8 +178,7 @@
   </div>
   
   <hr>
-  <h3>Student Results</h3>
-  <button id="viewResultsBtn" style="background: #2980b9;">Refresh Results</button>
+  <h3>Student Results (Live)</h3>
   <div id="studentResults"></div>
 </div>
 
@@ -213,7 +211,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-  import { getDatabase, ref, set, get, child, push, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-database.js";
+  import { getDatabase, ref, set, get, child, push, serverTimestamp, onValue } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-database.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyAQt0xCxcXJHHg5O-J6dzAdwQ6RxofscFo",
@@ -234,15 +232,13 @@
   let totalQuestions = 0;
   let startTime; 
 
-  // --- SECURITY: HASHING HELPER ---
-  const SECRET_SALT = "AASTU_EE_SECURE_2026"; // Secret salt key
+  const SECRET_SALT = "AASTU_EE_SECURE_2026"; 
   async function hashData(value) {
     const msgUint8 = new TextEncoder().encode(value.toString() + SECRET_SALT);
     const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  // --- UI HELPER: CREATE QUESTION HTML ---
   function createQuestionBlock(qData = null) {
     const block = document.createElement("div");
     block.className = "question-block";
@@ -267,7 +263,6 @@
     return block;
   }
 
-  // --- INSTRUCTOR: ACCESS CONTROL ---
   document.getElementById("saveAccessBtn").onclick = async () => {
       const start = document.getElementById("examStartTime").value;
       const end = document.getElementById("examEndTime").value;
@@ -277,8 +272,7 @@
   };
 
   document.getElementById("addNewQuestionBtn").onclick = () => {
-    const container = document.getElementById("questionsContainer");
-    container.appendChild(createQuestionBlock());
+    document.getElementById("questionsContainer").appendChild(createQuestionBlock());
   };
 
   document.getElementById("examSelect").onchange = async (e) => {
@@ -298,11 +292,9 @@
     if (!examName) return alert("Select a subject first");
     const blocks = document.querySelectorAll("#questionsContainer .question-block");
     const updatedExams = [];
-    
     for (const b of blocks) {
       const rawAns = b.querySelector(".q-ans").value;
-      const secureAns = await hashData(rawAns); // ENCRYPT ANSWER
-      
+      const secureAns = await hashData(rawAns); 
       updatedExams.push({
         question: b.querySelector(".q-text").value,
         options: [b.querySelector(".opt-1").value, b.querySelector(".opt-2").value, b.querySelector(".opt-3").value, b.querySelector(".opt-4").value],
@@ -310,7 +302,7 @@
       });
     }
     await set(ref(db, "exams/" + examName), updatedExams);
-    alert("Exam data saved with Hashed Security!");
+    alert("Exam data saved!");
   };
 
   function shuffleArray(array) {
@@ -336,37 +328,43 @@
   document.getElementById("nextBtn").onclick = () => { if (currentQuestionIndex < totalQuestions - 1) { currentQuestionIndex++; showQuestion(currentQuestionIndex); } };
   document.getElementById("prevBtn").onclick = () => { if (currentQuestionIndex > 0) { currentQuestionIndex--; showQuestion(currentQuestionIndex); } };
 
-  // --- STUDENT LOGIN ---
   document.getElementById("studentLoginBtn").onclick = async () => {
     const section = document.getElementById("sectionSelectStudent").value;
     const raw = document.getElementById("studentSelect").value;
     const exam = document.getElementById("studentExamSelect").value;
     if (!section || !raw) return alert("Select section and name");
 
+    const data = JSON.parse(raw);
+
+    // --- NO RETAKE LOGIC ---
+    const resultsSnap = await get(child(ref(db), "results"));
+    if (resultsSnap.exists()) {
+        const alreadySubmitted = Object.values(resultsSnap.val()).some(r => r.id === data.id && r.exam === exam);
+        if (alreadySubmitted) {
+            return alert("You have already submitted this exam. Retakes are not allowed.");
+        }
+    }
+
     const windowSnap = await get(child(ref(db), "examWindow"));
     if(windowSnap.exists()){
         const now = new Date();
         const start = new Date(windowSnap.val().start);
         const end = new Date(windowSnap.val().end);
-        if(now < start) return alert(`Not started yet. Starts at: ${start.toLocaleString()}`);
-        if(now > end) return alert("Exam window has closed.");
+        if(now < start) return alert(`Not started yet.`);
+        if(now > end) return alert("Exam window closed.");
     }
 
     const passSnap = await get(child(ref(db), `examConfig/${section}`));
     const correctPass = passSnap.exists() ? passSnap.val().toString() : null;
-    if (!correctPass) return alert("Exam password not set.");
+    const userInput = prompt(`Enter password for ${section}:`);
+    if (userInput !== correctPass) return alert("Incorrect!");
 
-    const userInput = prompt(`Enter the password for ${section}:`);
-    if (userInput !== correctPass) return alert("Incorrect Exam Password!");
-
-    const data = JSON.parse(raw);
     const examSnap = await get(child(ref(db), "exams/" + exam));
-    if (!examSnap.exists()) return alert("Questions not found.");
+    if (!examSnap.exists()) return alert("Not found.");
 
     document.getElementById("loginContainer").classList.add("hidden");
     document.getElementById("studentExamPage").classList.remove("hidden");
-    document.getElementById("examTitle").innerText = exam;
-    document.getElementById("studentInfoDisplay").innerText = `${data.fName} ${data.lName} (${data.id})`;
+    document.getElementById("studentInfoDisplay").innerText = `${data.fName} ${data.lName}`;
     
     startTime = new Date();
     const questions = examSnap.val();
@@ -377,14 +375,7 @@
     const qContainer = document.getElementById("examQuestions");
     qContainer.innerHTML = "";
     questions.forEach((q, i) => {
-      qContainer.innerHTML += `
-        <div class="student-q-wrapper hidden" id="q-wrapper-${i}">
-            <div class="question-block">
-              <p><strong>Question ${i+1} of ${totalQuestions}</strong></p>
-              <p>${q.question}</p>
-              ${q.options.map((opt, j) => `<label style="display:block; margin: 8px 0;"><input type="radio" name="q${i}" value="${j+1}"> ${["A","B","C","D"][j]}. ${opt}</label>`).join('')}
-            </div>
-        </div>`;
+      qContainer.innerHTML += `<div class="student-q-wrapper hidden"><div class="question-block"><p>Q${i+1}: ${q.question}</p>${q.options.map((opt, j) => `<label style="display:block;"><input type="radio" name="q${i}" value="${j+1}"> ${opt}</label>`).join('')}</div></div>`;
     });
     showQuestion(0);
 
@@ -392,42 +383,35 @@
     examTimer = setInterval(() => {
         let mins = Math.floor(timeRemaining / 60);
         let secs = timeRemaining % 60;
-        document.getElementById("timerDisplay").innerText = `Time Remaining: ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-        if (timeRemaining <= 0) {
-            clearInterval(examTimer);
-            document.getElementById("submitExamBtn").click();
-        }
+        document.getElementById("timerDisplay").innerText = `Time: ${mins}:${secs.toString().padStart(2, '0')}`;
+        if (timeRemaining <= 0) { clearInterval(examTimer); document.getElementById("submitExamBtn").click(); }
         timeRemaining--;
     }, 1000);
 
+    // --- FINAL SCORE DISPLAY SYSTEM ---
     document.getElementById("submitExamBtn").onclick = async () => {
       clearInterval(examTimer);
-      const endTime = new Date();
-      const durationMin = Math.round((endTime - startTime) / 60000);
-
       let score = 0;
-      // SECURE SCORING: Hash choice then compare
       for (let i = 0; i < questions.length; i++) {
         const sel = document.querySelector(`input[name="q${i}"]:checked`);
-        if (sel) {
-          const hashedSelection = await hashData(sel.value);
-          if (hashedSelection === questions[i].answer) score++;
-        }
+        if (sel && await hashData(sel.value) === questions[i].answer) score++;
       }
       
+      const finishedAt = new Date().toLocaleTimeString(); 
       await push(ref(db, "results"), { 
         firstName: data.fName, lastName: data.lName, id: data.id, 
         exam, score, total: questions.length, 
-        startedAt: startTime.toLocaleString(),
-        finishedAt: endTime.toLocaleString(),
-        timeSpent: durationMin + " mins",
+        finishedAt, 
         serverTime: serverTimestamp() 
       });
 
+      // Hide the exam interface
       document.getElementById("examQuestions").classList.add("hidden");
-      document.getElementById("submitExamBtn").classList.add("hidden");
       document.getElementById("studentNavControls").classList.add("hidden");
+      document.getElementById("submitExamBtn").classList.add("hidden");
       document.getElementById("timerDisplay").classList.add("hidden");
+
+      // Show the score card with X / Y format
       document.getElementById("displayScoreValue").innerText = `${score} / ${questions.length}`;
       document.getElementById("finalScoreView").classList.remove("hidden");
     };
@@ -439,18 +423,39 @@
     if (snap.exists() && enteredPass === snap.val()) {
       document.getElementById("loginContainer").classList.add("hidden");
       document.getElementById("instructorPanel").classList.remove("hidden");
+      startLiveResults(); 
     } else { alert("Unauthorized!"); }
   };
+
+  function startLiveResults() {
+    const resultsRef = ref(db, "results");
+    onValue(resultsRef, (snapshot) => {
+      const container = document.getElementById("studentResults");
+      if (snapshot.exists()) {
+        let html = `<table><tr><th>Name</th><th>ID</th><th>Exam</th><th>Score</th><th>Submitted At</th></tr>`;
+        const data = Object.values(snapshot.val());
+        data.reverse(); 
+        data.forEach(r => {
+          html += `<tr>
+            <td>${r.firstName} ${r.lastName}</td>
+            <td>${r.id}</td>
+            <td>${r.exam}</td>
+            <td style="font-weight:bold; color:#510762;">${r.score}/${r.total}</td>
+            <td>${r.finishedAt || 'N/A'}</td>
+          </tr>`;
+        });
+        container.innerHTML = html + "</table>";
+      } else {
+        container.innerHTML = "<p>No results yet.</p>";
+      }
+    });
+  }
 
   document.getElementById("sectionSelectStudent").onchange = async (e) => {
     const section = e.target.value;
     if (!section) return;
     const snap = await get(child(ref(db), "studentList/" + section));
-    fullSectionData = snap.exists() ? Object.values(snap.val()) : [];
-    renderOptions(fullSectionData);
-  };
-
-  function renderOptions(list) {
+    const list = snap.exists() ? Object.values(snap.val()) : [];
     const sel = document.getElementById("studentSelect");
     sel.innerHTML = '<option value="">-- Select Your Name --</option>';
     list.forEach(s => {
@@ -459,40 +464,24 @@
       opt.textContent = `${s.firstName} ${s.lastName} (${s.id})`;
       sel.appendChild(opt);
     });
-  }
+  };
 
   document.getElementById("uploadCsvBtn").onclick = () => {
-    const fileInput = document.getElementById("csvFileInput");
+    const file = document.getElementById("csvFileInput").files[0];
     const section = document.getElementById("uploadSectionSelect").value;
-    const file = fileInput.files[0];
-    if (!file) return alert("Select CSV");
+    if (!file) return;
     const reader = new FileReader();
     reader.onload = async (e) => {
       const lines = e.target.result.split(/\r?\n/);
       const students = {};
       lines.forEach(line => {
         const cols = line.split(",").map(c => c.trim().replace(/"/g, ""));
-        if (cols.length > 2) {
-            let id = cols[0], fName = cols[1], lName = cols[2];
-            students[id.replace(/\//g, "_")] = { id, firstName: fName, lastName: lName };
-        }
+        if (cols.length > 2) students[cols[0].replace(/\//g, "_")] = { id: cols[0], firstName: cols[1], lastName: cols[2] };
       });
       await set(ref(db, "studentList/" + section), students);
       alert("Imported!");
     };
     reader.readAsText(file);
-  };
-
-  document.getElementById("viewResultsBtn").onclick = async () => {
-    const container = document.getElementById("studentResults");
-    const snap = await get(child(ref(db), "results"));
-    if (snap.exists()) {
-      let html = `<table><tr><th>Name</th><th>ID</th><th>Exam</th><th>Score</th></tr>`;
-      Object.values(snap.val()).forEach(r => {
-        html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.exam}</td><td>${r.score}/${r.total}</td></tr>`;
-      });
-      container.innerHTML = html + "</table>";
-    }
   };
 
   document.getElementById("logoutInstructor").onclick = () => location.reload();
