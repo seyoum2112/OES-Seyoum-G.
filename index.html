@@ -117,11 +117,12 @@
   <label>Select Section:</label>
   <select id="sectionSelectStudent">
     <option value="">-- Choose Section --</option>
-    <option value="Section_C">Section C</option>
-    <option value="Section_D">Section D</option>
-    <option value="Section_E">Section E</option>
+    <option value="Section_A">Section A (Mechanical)</option>
+    <option value="Section_C">Section C (Electrical)</option>
+    <option value="Section_D">Section D (Electrical)</option>
+    <option value="Section_E">Section E (Electrical)</option>
+    <option value="Section_8">Section 8 (Freshman)</option>
   </select>
-
   <label>Select Your Name:</label>
   <select id="studentSelect">
     <option value="">-- Select Section First --</option>
@@ -131,7 +132,7 @@
   <select id="studentExamSelect">
     <option value="Engineering Thermodynamics">Engineering Thermodynamics</option>
     <option value="Turbomachinery">Turbomachinery</option>
-    <option value="Fluid mechanics">Fluid mechanics</option>
+    <option value="Fluid mechanics">Emerging Technology</option>
   </select>
   <button id="studentLoginBtn">Login as Student</button>
 </div>
@@ -156,9 +157,11 @@
     <h3>Student List Management</h3>
     <label>Target Section:</label>
     <select id="uploadSectionSelect">
+      <option value="Section_A">Section A</option>
       <option value="Section_C">Section C</option>
       <option value="Section_D">Section D</option>
       <option value="Section_E">Section E</option>
+      <option value="Section_8">Section 8</option>
     </select>
     <input type="file" id="csvFileInput" accept=".csv" style="background: #333; color: white;">
     <button id="uploadCsvBtn" style="background: #2980b9;">Update Student List from CSV</button>
@@ -170,7 +173,7 @@
       <option value="">-- Choose Subject --</option>
       <option value="Engineering Thermodynamics">Engineering Thermodynamics</option>
       <option value="Turbomachinery">Turbomachinery</option>
-      <option value="Fluid mechanics">Fluid mechanics</option>
+      <option value="Fluid mechanics">Emerging Technology</option>
     </select>
     <button id="addNewQuestionBtn" class="btn-add">+ Add New Question</button>
     <div id="questionsContainer"></div>
@@ -201,7 +204,7 @@
   <div id="finalScoreView" class="hidden">
       <div class="score-card">
           <h3>Exam Completed!</h3>
-          <p>Your Final Score is:</p>
+          <p>Wow! Your Score is:</p>
           <div class="score-circle" id="displayScoreValue">0 / 0</div>
           <p>The results have been sent to your instructor.</p>
           <button onclick="location.reload()" style="background:#510762; width: 200px;">Back to Home</button>
