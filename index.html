@@ -121,7 +121,7 @@
 </div>
 
 <div class="container" id="loginContainer">
-  <img src="seyoum.jpg" alt="AASTU Logo">
+  <img src="seyoum.jpg" alt="Seyoum Nigussie">
   <h2 style="text-align:center;">Online Exam System</h2>
   
   <h3>Instructor Login</h3>
@@ -148,8 +148,8 @@
   <label>Select Exam:</label>
   <select id="studentExamSelect">
     <option value="Engineering Thermodynamics">Engineering Thermodynamics</option>
+    <option value="Fluid mechanics">Emerging Technology</option>
     <option value="Turbomachinery">Turbomachinery</option>
-    <option value="Emerging Technology">Emerging Technology</option>
   </select>
   <button id="studentLoginBtn">Login as Student</button>
 </div>
@@ -170,8 +170,8 @@
     <select id="examSelect">
       <option value="">-- Choose Subject --</option>
       <option value="Engineering Thermodynamics">Engineering Thermodynamics</option>
+      <option value="Fluid mechanics">Emerging Technology</option>
       <option value="Turbomachinery">Turbomachinery</option>
-      <option value="Emerging Technology">Emerging Technology</option>
     </select>
     <button id="addNewQuestionBtn" class="btn-add">+ Add New Question</button>
     <div id="questionsContainer"></div>
@@ -261,12 +261,9 @@
     if (snap.exists() && code === snap.val()) {
         document.getElementById("cheatOverlay").classList.add("hidden");
         document.getElementById("unlockPassInput").value = "";
-        
         document.getElementById("loginContainer").classList.add("hidden");
         document.getElementById("studentExamPage").classList.remove("hidden");
-        
         showQuestion(currentQuestionIndex);
-        console.log("Exam session manually restored by instructor.");
     } else {
         alert("Incorrect Instructor Passcode.");
     }
@@ -291,7 +288,6 @@
         examActive = true; 
         document.getElementById("loginContainer").classList.add("hidden");
         document.getElementById("cheatOverlay").classList.remove("hidden");
-        // Load the questions in background so they are ready upon unlock
         const examSnap = await get(child(ref(db), "exams/" + sessionCheck.val().exam));
         if(examSnap.exists()) prepareExamUI(examSnap.val());
         return; 
@@ -331,7 +327,6 @@
       qContainer.innerHTML += `<div class="student-q-wrapper hidden"><div class="question-block"><p>Q${i+1}: ${q.question}</p>${q.options.map((opt, j) => `<label style="display:block;"><input type="radio" name="q${i}" value="${j+1}"> ${opt}</label>`).join('')}</div></div>`;
     });
     showQuestion(0);
-
     startTimer(600); 
 
     document.getElementById("submitExamBtn").onclick = async () => {
@@ -448,6 +443,22 @@
     });
   };
 
+  document.getElementById("examSelect").onchange = async (e) => {
+    const examName = e.target.value;
+    const container = document.getElementById("questionsContainer");
+    container.innerHTML = "Loading questions...";
+    if (!examName) { container.innerHTML = ""; return; }
+    const snap = await get(child(ref(db), "exams/" + examName));
+    container.innerHTML = "";
+    if (snap.exists()) {
+      snap.val().forEach(q => {
+        container.appendChild(createQuestionBlock(q));
+      });
+    } else {
+      container.innerHTML = "<p>No questions found for this subject.</p>";
+    }
+  };
+
   document.getElementById("addNewQuestionBtn").onclick = () => {
     document.getElementById("questionsContainer").appendChild(createQuestionBlock());
   };
@@ -464,7 +475,12 @@
         <input type="text" class="opt-3" value="${qData ? qData.options[2] : ''}" placeholder="C">
         <input type="text" class="opt-4" value="${qData ? qData.options[3] : ''}" placeholder="D">
       </div>
-      <select class="q-ans"><option value="1">A</option><option value="2">B</option><option value="3">C</option><option value="4">D</option></select>
+      <select class="q-ans">
+        <option value="1">A</option>
+        <option value="2">B</option>
+        <option value="3">C</option>
+        <option value="4">D</option>
+      </select>
     `;
     return block;
   }
@@ -482,13 +498,10 @@
       });
     }
     await set(ref(db, "exams/" + examName), updatedExams);
-    alert("Saved!");
+    alert("Saved Successfully!");
   };
 
   document.getElementById("logoutInstructor").onclick = () => location.reload();
 </script>
 </body>
 </html>
-
-
-
