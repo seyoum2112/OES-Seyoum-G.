@@ -121,7 +121,7 @@
 </div>
 
 <div class="container" id="loginContainer">
-  <img src="aastu-logo.png" alt="AASTU Logo">
+  <img src="seyoum.jpg" alt="AASTU Logo">
   <h2 style="text-align:center;">Online Exam System</h2>
   
   <h3>Instructor Login</h3>
@@ -256,7 +256,6 @@
 
   document.getElementById("unlockExamBtn").onclick = async () => {
     const code = document.getElementById("unlockPassInput").value;
-    // Checks against the dashboard master key
     const snap = await get(child(ref(db), "adminConfig/instructorKey"));
     
     if (snap.exists() && code === snap.val()) {
@@ -490,5 +489,6 @@
 </script>
 </body>
 </html>
+
 
 
