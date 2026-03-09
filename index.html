@@ -180,6 +180,15 @@
   
   <hr>
   <h3>Student Results (Live)</h3>
+  <div class="management-card">
+      <label><strong>Filter Results by Course:</strong></label>
+      <select id="resultFilterSelect">
+          <option value="ALL">-- Show All Results --</option>
+          <option value="Engineering Thermodynamics">Engineering Thermodynamics</option>
+          <option value="Fluid mechanics">Emerging Technology</option>
+          <option value="Turbomachinery">Turbomachinery</option>
+      </select>
+  </div>
   <div id="studentResults"></div>
 </div>
 
@@ -230,6 +239,7 @@
   let totalQuestions = 0;
   let examActive = false; 
   let activeStudent = null;
+  let resultsCache = null;
 
   const SECRET_SALT = "AASTU_EE_SECURE_2026"; 
   async function hashData(value) {
@@ -261,17 +271,10 @@
     if (snap.exists() && code === snap.val()) {
         document.getElementById("cheatOverlay").classList.add("hidden");
         document.getElementById("unlockPassInput").value = "";
-        document.getElementById("loginContainer").classList.add("hidden");
-        document.getElementById("studentExamPage").classList.remove("hidden");
-        showQuestion(currentQuestionIndex);
     } else {
         alert("Incorrect Instructor Passcode.");
     }
   };
-
-  window.addEventListener('beforeunload', (e) => {
-    if (examActive) { e.preventDefault(); e.returnValue = ''; }
-  });
 
   document.getElementById("studentLoginBtn").onclick = async () => {
     const section = document.getElementById("sectionSelectStudent").value;
@@ -394,16 +397,37 @@
 
   function startLiveResults() {
     onValue(ref(db, "results"), (snapshot) => {
-      const container = document.getElementById("studentResults");
-      if (snapshot.exists()) {
-        let html = `<table><tr><th>Name</th><th>ID</th><th>Score</th></tr>`;
-        Object.values(snapshot.val()).reverse().forEach(r => {
-          html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.score}/${r.total}</td></tr>`;
-        });
-        container.innerHTML = html + "</table>";
-      }
+      resultsCache = snapshot.exists() ? Object.values(snapshot.val()).reverse() : [];
+      renderResults();
     });
   }
+
+  function renderResults() {
+    const container = document.getElementById("studentResults");
+    const filter = document.getElementById("resultFilterSelect").value;
+    
+    if (!resultsCache || resultsCache.length === 0) {
+      container.innerHTML = "No results found.";
+      return;
+    }
+
+    let html = `<table><tr><th>Name</th><th>ID</th><th>Score</th><th>Completed At</th></tr>`;
+    
+    resultsCache.forEach(r => {
+      if (filter === "ALL" || r.exam === filter) {
+        html += `<tr>
+                  <td>${r.firstName} ${r.lastName}</td>
+                  <td>${r.id}</td>
+                  <td>${r.score}/${r.total}</td>
+                  <td style="color:#0ca16d; font-weight:bold;">${r.finishedAt || 'N/A'}</td>
+                </tr>`;
+      }
+    });
+    
+    container.innerHTML = html + "</table>";
+  }
+
+  document.getElementById("resultFilterSelect").onchange = renderResults;
 
   function showQuestion(index) {
       const allQs = document.querySelectorAll(".student-q-wrapper");
