@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Online Exam System - AASTU Electrical Engineering</title>
+<title>Online Exam System</title>
 <style>
   body {
     font-family: "Segoe UI", Arial, sans-serif;
@@ -100,7 +100,6 @@
   .q-ans { background: #333; color: #333; }
   .q-ans:focus { color: #fff; }
 
-  /* Anti-Cheat Lockdown Overlay Style */
   #cheatOverlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(0,0,0,0.98); z-index: 9999;
@@ -239,7 +238,6 @@
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  // --- ANTI-CHEAT: Trigger Lock ---
   async function triggerLock() {
     if (!examActive) return;
     document.getElementById("cheatOverlay").classList.remove("hidden");
@@ -256,22 +254,18 @@
     if (document.visibilityState === 'hidden') triggerLock();
   });
 
-  // --- RECOVERY LOGIC: Instructor Unlock and Re-begin View ---
   document.getElementById("unlockExamBtn").onclick = async () => {
     const code = document.getElementById("unlockPassInput").value;
     // Checks against the dashboard master key
     const snap = await get(child(ref(db), "adminConfig/instructorKey"));
     
     if (snap.exists() && code === snap.val()) {
-        // 1. Clear and Hide the lock overlay
         document.getElementById("cheatOverlay").classList.add("hidden");
         document.getElementById("unlockPassInput").value = "";
         
-        // 2. State management: Ensure the exam page is displayed and login is hidden
         document.getElementById("loginContainer").classList.add("hidden");
         document.getElementById("studentExamPage").classList.remove("hidden");
         
-        // 3. Re-render current question to ensure visibility
         showQuestion(currentQuestionIndex);
         console.log("Exam session manually restored by instructor.");
     } else {
@@ -283,7 +277,6 @@
     if (examActive) { e.preventDefault(); e.returnValue = ''; }
   });
 
-  // --- STUDENT LOGIN ---
   document.getElementById("studentLoginBtn").onclick = async () => {
     const section = document.getElementById("sectionSelectStudent").value;
     const raw = document.getElementById("studentSelect").value;
@@ -294,7 +287,6 @@
     activeStudent = data;
     const sessionPath = `activeSessions/${data.id.replace(/\//g, "_")}`;
 
-    // RECOVERY CHECK: If session is already active, lock immediately for instructor bypass
     const sessionCheck = await get(child(ref(db), sessionPath));
     if (sessionCheck.exists() && sessionCheck.val().status === "active") {
         examActive = true; 
@@ -381,7 +373,6 @@
     }, 1000);
   }
 
-  // --- INSTRUCTOR DASHBOARD ---
   document.getElementById("instructorLoginBtn").onclick = async () => {
     const enteredPass = document.getElementById("instructorPassword").value;
     const snap = await get(child(ref(db), "adminConfig/instructorKey"));
@@ -499,4 +490,5 @@
 </script>
 </body>
 </html>
+
 
