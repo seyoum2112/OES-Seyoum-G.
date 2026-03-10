@@ -20,19 +20,21 @@
   }
   .container {
     max-width: 800px;
-    margin: 50px auto;
+    margin: 20px auto; /* Reduced margin for mobile */
     background: rgba(20, 32, 7, 0.8);
-    padding: 30px;
-    border-radius: 30px;
+    padding: 20px; /* Reduced padding for mobile */
+    border-radius: 20px;
     box-shadow: 0 10px 30px rgba(18, 5, 5, 0.5);
+    width: 90%; /* Ensure container doesn't hit screen edges */
   }
   input, select, button {
     width: 100%;
-    padding: 12px;
+    padding: 14px; /* Slightly larger for touch */
     margin: 8px 0;
     border: none;
     border-radius: 10px;
     box-sizing: border-box;
+    font-size: 16px; /* Prevents iOS auto-zoom on focus */
   }
   button {
     background: #510762;
@@ -44,6 +46,13 @@
   button:hover { background: #009e8e; transform: translateY(-2px); }
   button:disabled { background: #555 !important; cursor: not-allowed; }
   .hidden {display: none !important;}
+  
+  /* Mobile Table Wrapper */
+  .table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
   table {
     width: 100%;
     border-collapse: collapse;
@@ -52,6 +61,7 @@
     color: #000;
     border-radius: 10px;
     overflow: hidden;
+    min-width: 500px; /* Ensures table remains readable */
   }
   th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
   .question-block {
@@ -72,14 +82,14 @@
   }
   .score-card {
     text-align: center;
-    padding: 40px;
+    padding: 20px;
     background: #fff;
     color: #333;
     border-radius: 20px;
     margin-top: 20px;
   }
   .score-circle {
-    font-size: 48px;
+    font-size: 36px;
     font-weight: bold;
     color: #0ca16d;
     margin: 20px 0;
@@ -87,25 +97,50 @@
   .btn-del { width: auto; background: #e74c3c; padding: 5px 15px; float: right; }
   .btn-add { background: #27ae60; margin-bottom: 15px; }
   #timerDisplay {
-    font-size: 20px;
+    font-size: 18px;
     background: #e74c3c;
     padding: 10px;
     border-radius: 10px;
     text-align: center;
     margin-bottom: 15px;
     font-weight: bold;
+    position: sticky; /* Keep timer visible on scroll */
+    top: 10px;
+    z-index: 10;
   }
   .nav-controls { display: flex; gap: 10px; margin-top: 20px; }
-  .btn-nav { background: #2980b9; }
-  .q-ans { background: #333; color: #333; }
-  .q-ans:focus { color: #fff; }
+  .btn-nav { background: #2980b9; flex: 1; }
+  .q-ans { background: #333; color: #fff; }
 
   #cheatOverlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(0,0,0,0.98); z-index: 9999;
     display: flex; align-items: center; justify-content: center; text-align: center;
+    padding: 20px;
+    box-sizing: border-box;
   }
-  .lock-box { background: #1a1a1a; padding: 40px; border-radius: 20px; border: 2px solid #e74c3c; max-width: 500px; }
+  .lock-box { background: #1a1a1a; padding: 20px; border-radius: 20px; border: 2px solid #e74c3c; width: 100%; max-width: 500px; }
+
+  /* Mobile Specific Adjustments */
+  @media (max-width: 600px) {
+    h2 { font-size: 1.2rem; }
+    .question-block label { 
+        padding: 10px; 
+        background: rgba(255,255,255,0.05); 
+        margin: 5px 0; 
+        border-radius: 8px;
+    }
+    #instructorPanel div[style*="flex"] {
+        flex-direction: column;
+        gap: 10px;
+    }
+    #instructorPanel button#logoutInstructor {
+        width: 100%;
+    }
+    .question-block div[style*="grid"] {
+        grid-template-columns: 1fr !important; /* Stack A, B, C, D on phones */
+    }
+  }
 </style>
 </head>
 <body>
@@ -113,7 +148,7 @@
 <div id="cheatOverlay" class="hidden">
     <div class="lock-box">
         <h1 style="color:#e74c3c; margin-top:0;">EXAM LOCKED</h1>
-        <p>Security violation: You left the exam window or refreshed the page. This incident has been logged.</p>
+        <p>Security violation: You left the exam window or refreshed the page.</p>
         <p><strong>The instructor must enter the passcode to resume.</strong></p>
         <input type="password" id="unlockPassInput" placeholder="Enter Instructor Password" style="color:#000;">
         <button id="unlockExamBtn" style="background:#27ae60; margin-top:10px;">Unlock & Resume</button>
@@ -156,13 +191,12 @@
 
 <div class="container hidden" id="instructorPanel">
   <div style="display:flex; justify-content: space-between; align-items: center;">
-    <h2>Instructor Dashboard</h2>
+    <h2>Dashboard</h2>
     <button id="logoutInstructor" style="width: auto; background: #e74c3c;">Logout</button>
   </div>
 
   <div class="management-card" style="background: rgba(41, 128, 185, 0.2);">
-    <h3>Student Management (CSV Upload)</h3>
-    <label>Select Section to Update:</label>
+    <h3>CSV Upload</h3>
     <select id="csvSectionSelect">
         <option value="Section_A">Section A</option>
         <option value="Section_C">Section C</option>
@@ -171,13 +205,12 @@
         <option value="Section_8">Section 8</option>
     </select>
     <input type="file" id="csvFileInput" accept=".csv" style="background: #fff; color: #000;">
-    <p style="font-size: 12px; margin-top: -5px;">Format: <b>id, firstName, lastName</b> (No headers)</p>
     <button id="uploadCsvBtn" style="background: #27ae60;">Upload Student List</button>
   </div>
 
   <div class="management-card" style="border: 1px solid #e74c3c;">
-    <h3 style="color:#e74c3c;">Cheating Incidents (Live)</h3>
-    <div id="violationLogs" style="font-size: 14px; max-height: 100px; overflow-y: auto;">Waiting for activity...</div>
+    <h3 style="color:#e74c3c;">Violations</h3>
+    <div id="violationLogs" style="font-size: 14px; max-height: 150px; overflow-y: auto;">Waiting...</div>
   </div>
   
   <div class="management-card">
@@ -190,28 +223,27 @@
     </select>
     <button id="addNewQuestionBtn" class="btn-add">+ Add New Question</button>
     <div id="questionsContainer"></div>
-    <button id="saveExamBtn">Save All Changes (Secure)</button>
+    <button id="saveExamBtn">Save All Changes</button>
   </div>
   
   <hr>
-  <h3>Student Results (Live)</h3>
-  <div class="management-card">
-      <label><strong>Filter Results by Course:</strong></label>
-      <select id="resultFilterSelect">
-          <option value="ALL">-- Show All Results --</option>
-          <option value="Engineering Thermodynamics">Engineering Thermodynamics</option>
-          <option value="Fluid mechanics">Emerging Technology</option>
-          <option value="Turbomachinery">Turbomachinery</option>
-      </select>
+  <h3>Student Results</h3>
+  <select id="resultFilterSelect">
+      <option value="ALL">-- Show All --</option>
+      <option value="Engineering Thermodynamics">Thermodynamics</option>
+      <option value="Fluid mechanics">Emerging Tech</option>
+      <option value="Turbomachinery">Turbomachinery</option>
+  </select>
+  <div class="table-responsive">
+    <div id="studentResults"></div>
   </div>
-  <div id="studentResults"></div>
 </div>
 
 <div class="container hidden" id="studentExamPage">
   <div id="timerDisplay">Time Remaining: 10:00</div>
-  <div style="display:flex; justify-content: space-between;">
-    <h2 id="examTitle"></h2>
-    <div id="studentInfoDisplay" style="text-align: right; color: #0ca16d; font-weight: bold;"></div>
+  <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+    <h2 id="examTitle" style="margin:0;">Exam</h2>
+    <div id="studentInfoDisplay" style="font-size: 0.9rem; color: #0ca16d; font-weight: bold;"></div>
   </div>
   
   <div id="examQuestions"></div>
@@ -263,45 +295,32 @@
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  // --- CSV UPLOAD LOGIC ---
+  // CSV UPLOAD
   document.getElementById("uploadCsvBtn").onclick = function() {
     const fileInput = document.getElementById("csvFileInput");
     const section = document.getElementById("csvSectionSelect").value;
-    
-    if (!fileInput.files[0]) return alert("Please select a CSV file.");
-    
+    if (!fileInput.files[0]) return alert("Select CSV file.");
     const reader = new FileReader();
     reader.onload = async function(e) {
         const text = e.target.result;
         const lines = text.split(/\r?\n/);
         const studentData = {};
-
         lines.forEach(line => {
             const cols = line.split(',');
             if (cols.length >= 3) {
                 const id = cols[0].trim();
-                // Replace slashes with underscores for Firebase key safety
                 const safeKey = id.replace(/\//g, "_");
-                studentData[safeKey] = {
-                    id: id,
-                    firstName: cols[1].trim(),
-                    lastName: cols[2].trim()
-                };
+                studentData[safeKey] = { id: id, firstName: cols[1].trim(), lastName: cols[2].trim() };
             }
         });
-
         if (Object.keys(studentData).length > 0) {
             await set(ref(db, "studentList/" + section), studentData);
-            alert(`Successfully uploaded ${Object.keys(studentData).length} students to ${section}`);
-            fileInput.value = "";
-        } else {
-            alert("No valid data found in CSV. Use format: id, firstName, lastName");
+            alert("Uploaded!");
         }
     };
     reader.readAsText(fileInput.files[0]);
   };
 
-  // Rest of your existing logic...
   async function triggerLock() {
     if (!examActive) return;
     document.getElementById("cheatOverlay").classList.remove("hidden");
@@ -321,11 +340,10 @@
   document.getElementById("unlockExamBtn").onclick = async () => {
     const code = document.getElementById("unlockPassInput").value;
     const snap = await get(child(ref(db), "adminConfig/instructorKey"));
-    
     if (snap.exists() && code === snap.val()) {
         document.getElementById("cheatOverlay").classList.add("hidden");
         document.getElementById("unlockPassInput").value = "";
-    } else { alert("Incorrect Instructor Passcode."); }
+    } else { alert("Incorrect Passcode."); }
   };
 
   document.getElementById("studentLoginBtn").onclick = async () => {
@@ -435,10 +453,10 @@
   function renderResults() {
     const container = document.getElementById("studentResults");
     const filter = document.getElementById("resultFilterSelect").value;
-    let html = `<table><tr><th>Name</th><th>ID</th><th>Score</th><th>Completed At</th></tr>`;
+    let html = `<table><tr><th>Name</th><th>ID</th><th>Score</th><th>Time</th></tr>`;
     resultsCache.forEach(r => {
       if (filter === "ALL" || r.exam === filter) {
-        html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.score}/${r.total}</td><td style="color:#0ca16d; font-weight:bold;">${r.finishedAt || 'N/A'}</td></tr>`;
+        html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.score}/${r.total}</td><td style="color:#0ca16d;">${r.finishedAt || 'N/A'}</td></tr>`;
       }
     });
     container.innerHTML = html + "</table>";
@@ -484,7 +502,7 @@
   function createQuestionBlock(qData = null) {
     const block = document.createElement("div");
     block.className = "question-block";
-    block.innerHTML = `<button class="btn-del" onclick="this.parentElement.remove()">Delete</button><input type="text" class="q-text" value="${qData ? qData.question : ''}" placeholder="Enter question..."><div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;"><input type="text" class="opt-1" value="${qData ? qData.options[0] : ''}" placeholder="A"><input type="text" class="opt-2" value="${qData ? qData.options[1] : ''}" placeholder="B"><input type="text" class="opt-3" value="${qData ? qData.options[2] : ''}" placeholder="C"><input type="text" class="opt-4" value="${qData ? qData.options[3] : ''}" placeholder="D"></div><select class="q-ans"><option value="1">A</option><option value="2">B</option><option value="3">C</option><option value="4">D</option></select>`;
+    block.innerHTML = `<button class="btn-del" onclick="this.parentElement.remove()">Del</button><input type="text" class="q-text" value="${qData ? qData.question : ''}" placeholder="Enter question..."><div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;"><input type="text" class="opt-1" value="${qData ? qData.options[0] : ''}" placeholder="A"><input type="text" class="opt-2" value="${qData ? qData.options[1] : ''}" placeholder="B"><input type="text" class="opt-3" value="${qData ? qData.options[2] : ''}" placeholder="C"><input type="text" class="opt-4" value="${qData ? qData.options[3] : ''}" placeholder="D"></div><select class="q-ans"><option value="1">A</option><option value="2">B</option><option value="3">C</option><option value="4">D</option></select>`;
     return block;
   }
 
