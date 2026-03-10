@@ -20,21 +20,22 @@
   }
   .container {
     max-width: 800px;
-    margin: 20px auto; /* Reduced margin for mobile */
+    margin: 20px auto;
     background: rgba(20, 32, 7, 0.8);
-    padding: 20px; /* Reduced padding for mobile */
-    border-radius: 20px;
+    padding: 20px;
+    border-radius: 30px;
     box-shadow: 0 10px 30px rgba(18, 5, 5, 0.5);
-    width: 90%; /* Ensure container doesn't hit screen edges */
+    width: 92%; /* Better fit for mobile */
+    box-sizing: border-box;
   }
   input, select, button {
     width: 100%;
-    padding: 14px; /* Slightly larger for touch */
+    padding: 12px;
     margin: 8px 0;
     border: none;
     border-radius: 10px;
     box-sizing: border-box;
-    font-size: 16px; /* Prevents iOS auto-zoom on focus */
+    font-size: 16px; /* Prevents auto-zoom on mobile */
   }
   button {
     background: #510762;
@@ -47,12 +48,8 @@
   button:disabled { background: #555 !important; cursor: not-allowed; }
   .hidden {display: none !important;}
   
-  /* Mobile Table Wrapper */
-  .table-responsive {
-    width: 100%;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
+  /* Table styling for mobile */
+  .table-container { overflow-x: auto; }
   table {
     width: 100%;
     border-collapse: collapse;
@@ -61,9 +58,9 @@
     color: #000;
     border-radius: 10px;
     overflow: hidden;
-    min-width: 500px; /* Ensures table remains readable */
   }
   th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+  
   .question-block {
     background: rgba(255,255,255,0.1);
     padding: 15px;
@@ -72,6 +69,30 @@
     border-left: 5px solid #0ca16d;
     position: relative;
   }
+
+  /* NEW: Alignment for Multiple Choice Options */
+  .option-container {
+    display: flex;
+    align-items: center;
+    margin: 10px 0;
+    padding: 10px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .option-container input[type="radio"] {
+    width: 20px;
+    height: 20px;
+    margin: 0 15px 0 0; /* Space between circle and text */
+    flex-shrink: 0; /* Prevent circle from squishing */
+    cursor: pointer;
+  }
+  .option-text {
+    font-size: 16px;
+    line-height: 1.4;
+    word-break: break-word;
+  }
+
   img { width:80px; height:80px; border-radius:50%; display: block; margin: 0 auto 10px; }
   .management-card {
     background: rgba(255,255,255,0.05);
@@ -82,34 +103,32 @@
   }
   .score-card {
     text-align: center;
-    padding: 20px;
+    padding: 40px;
     background: #fff;
     color: #333;
     border-radius: 20px;
     margin-top: 20px;
   }
   .score-circle {
-    font-size: 36px;
+    font-size: 48px;
     font-weight: bold;
     color: #0ca16d;
     margin: 20px 0;
   }
   .btn-del { width: auto; background: #e74c3c; padding: 5px 15px; float: right; }
   .btn-add { background: #27ae60; margin-bottom: 15px; }
+  
   #timerDisplay {
-    font-size: 18px;
+    font-size: 20px;
     background: #e74c3c;
     padding: 10px;
     border-radius: 10px;
     text-align: center;
     margin-bottom: 15px;
     font-weight: bold;
-    position: sticky; /* Keep timer visible on scroll */
-    top: 10px;
-    z-index: 10;
   }
   .nav-controls { display: flex; gap: 10px; margin-top: 20px; }
-  .btn-nav { background: #2980b9; flex: 1; }
+  .btn-nav { background: #2980b9; }
   .q-ans { background: #333; color: #fff; }
 
   #cheatOverlay {
@@ -117,30 +136,8 @@
     background: rgba(0,0,0,0.98); z-index: 9999;
     display: flex; align-items: center; justify-content: center; text-align: center;
     padding: 20px;
-    box-sizing: border-box;
   }
-  .lock-box { background: #1a1a1a; padding: 20px; border-radius: 20px; border: 2px solid #e74c3c; width: 100%; max-width: 500px; }
-
-  /* Mobile Specific Adjustments */
-  @media (max-width: 600px) {
-    h2 { font-size: 1.2rem; }
-    .question-block label { 
-        padding: 10px; 
-        background: rgba(255,255,255,0.05); 
-        margin: 5px 0; 
-        border-radius: 8px;
-    }
-    #instructorPanel div[style*="flex"] {
-        flex-direction: column;
-        gap: 10px;
-    }
-    #instructorPanel button#logoutInstructor {
-        width: 100%;
-    }
-    .question-block div[style*="grid"] {
-        grid-template-columns: 1fr !important; /* Stack A, B, C, D on phones */
-    }
-  }
+  .lock-box { background: #1a1a1a; padding: 30px; border-radius: 20px; border: 2px solid #e74c3c; max-width: 500px; width: 100%; }
 </style>
 </head>
 <body>
@@ -148,7 +145,7 @@
 <div id="cheatOverlay" class="hidden">
     <div class="lock-box">
         <h1 style="color:#e74c3c; margin-top:0;">EXAM LOCKED</h1>
-        <p>Security violation: You left the exam window or refreshed the page.</p>
+        <p>Security violation detected. This incident has been logged.</p>
         <p><strong>The instructor must enter the passcode to resume.</strong></p>
         <input type="password" id="unlockPassInput" placeholder="Enter Instructor Password" style="color:#000;">
         <button id="unlockExamBtn" style="background:#27ae60; margin-top:10px;">Unlock & Resume</button>
@@ -191,12 +188,12 @@
 
 <div class="container hidden" id="instructorPanel">
   <div style="display:flex; justify-content: space-between; align-items: center;">
-    <h2>Dashboard</h2>
+    <h2>Instructor Dashboard</h2>
     <button id="logoutInstructor" style="width: auto; background: #e74c3c;">Logout</button>
   </div>
 
   <div class="management-card" style="background: rgba(41, 128, 185, 0.2);">
-    <h3>CSV Upload</h3>
+    <h3>Student Management (CSV)</h3>
     <select id="csvSectionSelect">
         <option value="Section_A">Section A</option>
         <option value="Section_C">Section C</option>
@@ -209,8 +206,8 @@
   </div>
 
   <div class="management-card" style="border: 1px solid #e74c3c;">
-    <h3 style="color:#e74c3c;">Violations</h3>
-    <div id="violationLogs" style="font-size: 14px; max-height: 150px; overflow-y: auto;">Waiting...</div>
+    <h3 style="color:#e74c3c;">Cheating Incidents</h3>
+    <div id="violationLogs" style="font-size: 14px; max-height: 100px; overflow-y: auto;">Waiting...</div>
   </div>
   
   <div class="management-card">
@@ -221,29 +218,23 @@
       <option value="Fluid mechanics">Emerging Technology</option>
       <option value="Turbomachinery">Turbomachinery</option>
     </select>
-    <button id="addNewQuestionBtn" class="btn-add">+ Add New Question</button>
+    <button id="addNewQuestionBtn" class="btn-add">+ Add Question</button>
     <div id="questionsContainer"></div>
     <button id="saveExamBtn">Save All Changes</button>
   </div>
   
   <hr>
   <h3>Student Results</h3>
-  <select id="resultFilterSelect">
-      <option value="ALL">-- Show All --</option>
-      <option value="Engineering Thermodynamics">Thermodynamics</option>
-      <option value="Fluid mechanics">Emerging Tech</option>
-      <option value="Turbomachinery">Turbomachinery</option>
-  </select>
-  <div class="table-responsive">
+  <div class="table-container">
     <div id="studentResults"></div>
   </div>
 </div>
 
 <div class="container hidden" id="studentExamPage">
   <div id="timerDisplay">Time Remaining: 10:00</div>
-  <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-    <h2 id="examTitle" style="margin:0;">Exam</h2>
-    <div id="studentInfoDisplay" style="font-size: 0.9rem; color: #0ca16d; font-weight: bold;"></div>
+  <div style="display:flex; justify-content: space-between; align-items:center;">
+    <h2 id="examTitle" style="font-size: 1.2rem;"></h2>
+    <div id="studentInfoDisplay" style="text-align: right; color: #0ca16d; font-weight: bold; font-size: 0.9rem;"></div>
   </div>
   
   <div id="examQuestions"></div>
@@ -259,7 +250,7 @@
       <div class="score-card">
           <h3>Exam Completed!</h3>
           <div class="score-circle" id="displayScoreValue">0 / 0</div>
-          <button onclick="location.reload()" style="background:#510762; width: 200px;">Back to Home</button>
+          <button onclick="location.reload()" style="background:#510762; width: 100%;">Back to Home</button>
       </div>
   </div>
 </div>
@@ -295,11 +286,10 @@
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  // CSV UPLOAD
   document.getElementById("uploadCsvBtn").onclick = function() {
     const fileInput = document.getElementById("csvFileInput");
     const section = document.getElementById("csvSectionSelect").value;
-    if (!fileInput.files[0]) return alert("Select CSV file.");
+    if (!fileInput.files[0]) return alert("Please select a CSV file.");
     const reader = new FileReader();
     reader.onload = async function(e) {
         const text = e.target.result;
@@ -315,7 +305,7 @@
         });
         if (Object.keys(studentData).length > 0) {
             await set(ref(db, "studentList/" + section), studentData);
-            alert("Uploaded!");
+            alert("Upload successful.");
         }
     };
     reader.readAsText(fileInput.files[0]);
@@ -343,7 +333,7 @@
     if (snap.exists() && code === snap.val()) {
         document.getElementById("cheatOverlay").classList.add("hidden");
         document.getElementById("unlockPassInput").value = "";
-    } else { alert("Incorrect Passcode."); }
+    } else { alert("Incorrect passcode."); }
   };
 
   document.getElementById("studentLoginBtn").onclick = async () => {
@@ -393,9 +383,25 @@
     currentQuestionIndex = 0;
     const qContainer = document.getElementById("examQuestions");
     qContainer.innerHTML = "";
+    
+    // Updated HTML mapping for better mobile alignment
     questions.forEach((q, i) => {
-      qContainer.innerHTML += `<div class="student-q-wrapper hidden"><div class="question-block"><p>Q${i+1}: ${q.question}</p>${q.options.map((opt, j) => `<label style="display:block;"><input type="radio" name="q${i}" value="${j+1}"> ${opt}</label>`).join('')}</div></div>`;
+      const optionsHtml = q.options.map((opt, j) => `
+        <label class="option-container">
+          <input type="radio" name="q${i}" value="${j+1}"> 
+          <span class="option-text">${opt}</span>
+        </label>
+      `).join('');
+      
+      qContainer.innerHTML += `
+        <div class="student-q-wrapper hidden">
+          <div class="question-block">
+            <p style="font-weight:bold; margin-bottom:15px;">Q${i+1}: ${q.question}</p>
+            ${optionsHtml}
+          </div>
+        </div>`;
     });
+    
     showQuestion(0);
     startTimer(600); 
 
@@ -452,17 +458,12 @@
 
   function renderResults() {
     const container = document.getElementById("studentResults");
-    const filter = document.getElementById("resultFilterSelect").value;
-    let html = `<table><tr><th>Name</th><th>ID</th><th>Score</th><th>Time</th></tr>`;
+    let html = `<table><tr><th>Name</th><th>ID</th><th>Score</th></tr>`;
     resultsCache.forEach(r => {
-      if (filter === "ALL" || r.exam === filter) {
-        html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.score}/${r.total}</td><td style="color:#0ca16d;">${r.finishedAt || 'N/A'}</td></tr>`;
-      }
+        html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.score}/${r.total}</td></tr>`;
     });
     container.innerHTML = html + "</table>";
   }
-
-  document.getElementById("resultFilterSelect").onchange = renderResults;
 
   function showQuestion(index) {
       document.querySelectorAll(".student-q-wrapper").forEach((q, i) => q.classList.toggle("hidden", i !== index));
@@ -502,7 +503,17 @@
   function createQuestionBlock(qData = null) {
     const block = document.createElement("div");
     block.className = "question-block";
-    block.innerHTML = `<button class="btn-del" onclick="this.parentElement.remove()">Del</button><input type="text" class="q-text" value="${qData ? qData.question : ''}" placeholder="Enter question..."><div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;"><input type="text" class="opt-1" value="${qData ? qData.options[0] : ''}" placeholder="A"><input type="text" class="opt-2" value="${qData ? qData.options[1] : ''}" placeholder="B"><input type="text" class="opt-3" value="${qData ? qData.options[2] : ''}" placeholder="C"><input type="text" class="opt-4" value="${qData ? qData.options[3] : ''}" placeholder="D"></div><select class="q-ans"><option value="1">A</option><option value="2">B</option><option value="3">C</option><option value="4">D</option></select>`;
+    block.innerHTML = `
+        <button class="btn-del" onclick="this.parentElement.remove()">Del</button>
+        <input type="text" class="q-text" value="${qData ? qData.question : ''}" placeholder="Enter question...">
+        <input type="text" class="opt-1" value="${qData ? qData.options[0] : ''}" placeholder="A">
+        <input type="text" class="opt-2" value="${qData ? qData.options[1] : ''}" placeholder="B">
+        <input type="text" class="opt-3" value="${qData ? qData.options[2] : ''}" placeholder="C">
+        <input type="text" class="opt-4" value="${qData ? qData.options[3] : ''}" placeholder="D">
+        <select class="q-ans">
+            <option value="1">A</option><option value="2">B</option>
+            <option value="3">C</option><option value="4">D</option>
+        </select>`;
     return block;
   }
 
