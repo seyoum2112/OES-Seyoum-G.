@@ -25,7 +25,7 @@
     padding: 20px;
     border-radius: 30px;
     box-shadow: 0 10px 30px rgba(18, 5, 5, 0.5);
-    width: 92%; /* Better fit for mobile */
+    width: 92%;
     box-sizing: border-box;
   }
   input, select, button {
@@ -35,7 +35,7 @@
     border: none;
     border-radius: 10px;
     box-sizing: border-box;
-    font-size: 16px; /* Prevents auto-zoom on mobile */
+    font-size: 16px;
   }
   button {
     background: #510762;
@@ -48,7 +48,6 @@
   button:disabled { background: #555 !important; cursor: not-allowed; }
   .hidden {display: none !important;}
   
-  /* Table styling for mobile */
   .table-container { overflow-x: auto; }
   table {
     width: 100%;
@@ -70,7 +69,6 @@
     position: relative;
   }
 
-  /* NEW: Alignment for Multiple Choice Options */
   .option-container {
     display: flex;
     align-items: center;
@@ -83,8 +81,8 @@
   .option-container input[type="radio"] {
     width: 20px;
     height: 20px;
-    margin: 0 15px 0 0; /* Space between circle and text */
-    flex-shrink: 0; /* Prevent circle from squishing */
+    margin: 0 15px 0 0;
+    flex-shrink: 0;
     cursor: pointer;
   }
   .option-text {
@@ -191,42 +189,11 @@
     <h2>Instructor Dashboard</h2>
     <button id="logoutInstructor" style="width: auto; background: #e74c3c;">Logout</button>
   </div>
-
-  <div class="management-card" style="background: rgba(41, 128, 185, 0.2);">
-    <h3>Student Management (CSV)</h3>
-    <select id="csvSectionSelect">
-        <option value="Section_A">Section A</option>
-        <option value="Section_C">Section C</option>
-        <option value="Section_D">Section D</option>
-        <option value="Section_E">Section E</option>
-        <option value="Section_8">Section 8</option>
-    </select>
-    <input type="file" id="csvFileInput" accept=".csv" style="background: #fff; color: #000;">
-    <button id="uploadCsvBtn" style="background: #27ae60;">Upload Student List</button>
-  </div>
-
-  <div class="management-card" style="border: 1px solid #e74c3c;">
-    <h3 style="color:#e74c3c;">Cheating Incidents</h3>
-    <div id="violationLogs" style="font-size: 14px; max-height: 100px; overflow-y: auto;">Waiting...</div>
-  </div>
-  
   <div class="management-card">
-    <h3>Exam Questions</h3>
-    <select id="examSelect">
-      <option value="">-- Choose Subject --</option>
-      <option value="Engineering Thermodynamics">Engineering Thermodynamics</option>
-      <option value="Fluid mechanics">Emerging Technology</option>
-      <option value="Turbomachinery">Turbomachinery</option>
-    </select>
-    <button id="addNewQuestionBtn" class="btn-add">+ Add Question</button>
-    <div id="questionsContainer"></div>
-    <button id="saveExamBtn">Save All Changes</button>
-  </div>
-  
-  <hr>
-  <h3>Student Results</h3>
-  <div class="table-container">
-    <div id="studentResults"></div>
+    <h3>Student Results</h3>
+    <div class="table-container">
+      <div id="studentResults"></div>
+    </div>
   </div>
 </div>
 
@@ -234,7 +201,7 @@
   <div id="timerDisplay">Time Remaining: 10:00</div>
   <div style="display:flex; justify-content: space-between; align-items:center;">
     <h2 id="examTitle" style="font-size: 1.2rem;"></h2>
-    <div id="studentInfoDisplay" style="text-align: right; color: #0ca16d; font-weight: bold; font-size: 0.9rem;"></div>
+    <div id="studentInfoDisplay" style="text-align: right; color: #0ca16d; font-weight: bold;"></div>
   </div>
   
   <div id="examQuestions"></div>
@@ -250,14 +217,14 @@
       <div class="score-card">
           <h3>Exam Completed!</h3>
           <div class="score-circle" id="displayScoreValue">0 / 0</div>
-          <button onclick="location.reload()" style="background:#510762; width: 100%;">Back to Home</button>
+          <button onclick="location.reload()">Back to Home</button>
       </div>
   </div>
 </div>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-  import { getDatabase, ref, set, get, child, push, serverTimestamp, onValue, remove, update } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-database.js";
+  import { getDatabase, ref, set, get, child, push, serverTimestamp, onValue, remove } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-database.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyAQt0xCxcXJHHg5O-J6dzAdwQ6RxofscFo",
@@ -277,7 +244,7 @@
   let totalQuestions = 0;
   let examActive = false; 
   let activeStudent = null;
-  let resultsCache = null;
+  let currentExamName = ""; // Fixed: Global variable to track the exam name
 
   const SECRET_SALT = "AASTU_EE_SECURE_2026"; 
   async function hashData(value) {
@@ -286,90 +253,19 @@
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  document.getElementById("uploadCsvBtn").onclick = function() {
-    const fileInput = document.getElementById("csvFileInput");
-    const section = document.getElementById("csvSectionSelect").value;
-    if (!fileInput.files[0]) return alert("Please select a CSV file.");
-    const reader = new FileReader();
-    reader.onload = async function(e) {
-        const text = e.target.result;
-        const lines = text.split(/\r?\n/);
-        const studentData = {};
-        lines.forEach(line => {
-            const cols = line.split(',');
-            if (cols.length >= 3) {
-                const id = cols[0].trim();
-                const safeKey = id.replace(/\//g, "_");
-                studentData[safeKey] = { id: id, firstName: cols[1].trim(), lastName: cols[2].trim() };
-            }
-        });
-        if (Object.keys(studentData).length > 0) {
-            await set(ref(db, "studentList/" + section), studentData);
-            alert("Upload successful.");
-        }
-    };
-    reader.readAsText(fileInput.files[0]);
-  };
-
-  async function triggerLock() {
-    if (!examActive) return;
-    document.getElementById("cheatOverlay").classList.remove("hidden");
-    push(ref(db, "violations"), {
-        student: activeStudent.fName + " " + activeStudent.lName,
-        id: activeStudent.id,
-        time: new Date().toLocaleTimeString(),
-        type: "Tab Switch / Refresh / Window Blur"
-    });
-  }
-
-  window.addEventListener('blur', triggerLock);
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === 'hidden') triggerLock();
-  });
-
-  document.getElementById("unlockExamBtn").onclick = async () => {
-    const code = document.getElementById("unlockPassInput").value;
-    const snap = await get(child(ref(db), "adminConfig/instructorKey"));
-    if (snap.exists() && code === snap.val()) {
-        document.getElementById("cheatOverlay").classList.add("hidden");
-        document.getElementById("unlockPassInput").value = "";
-    } else { alert("Incorrect passcode."); }
-  };
-
   document.getElementById("studentLoginBtn").onclick = async () => {
     const section = document.getElementById("sectionSelectStudent").value;
     const raw = document.getElementById("studentSelect").value;
-    const exam = document.getElementById("studentExamSelect").value;
+    currentExamName = document.getElementById("studentExamSelect").value; // Store the exam name
+    
     if (!section || !raw) return alert("Select section and name");
 
     const data = JSON.parse(raw);
     activeStudent = data;
-    const sessionPath = `activeSessions/${data.id.replace(/\//g, "_")}`;
-
-    const sessionCheck = await get(child(ref(db), sessionPath));
-    if (sessionCheck.exists() && sessionCheck.val().status === "active") {
-        examActive = true; 
-        document.getElementById("loginContainer").classList.add("hidden");
-        document.getElementById("cheatOverlay").classList.remove("hidden");
-        const examSnap = await get(child(ref(db), "exams/" + sessionCheck.val().exam));
-        if(examSnap.exists()) prepareExamUI(examSnap.val());
-        return; 
-    }
-
-    const resultsSnap = await get(child(ref(db), "results"));
-    if (resultsSnap.exists()) {
-        const alreadySubmitted = Object.values(resultsSnap.val()).some(r => r.id === data.id && r.exam === exam);
-        if (alreadySubmitted) return alert("Retakes not allowed.");
-    }
-
-    const passSnap = await get(child(ref(db), `examConfig/${section}`));
-    const userInput = prompt(`Password for ${section}:`);
-    if (userInput !== (passSnap.exists() ? passSnap.val().toString() : null)) return alert("Incorrect!");
-
-    const examSnap = await get(child(ref(db), "exams/" + exam));
+    
+    const examSnap = await get(child(ref(db), "exams/" + currentExamName));
     if (!examSnap.exists()) return alert("Exam questions not found.");
 
-    await set(ref(db, sessionPath), { status: "active", exam: exam });
     prepareExamUI(examSnap.val());
   };
 
@@ -377,14 +273,13 @@
     document.getElementById("loginContainer").classList.add("hidden");
     document.getElementById("studentExamPage").classList.remove("hidden");
     document.getElementById("studentInfoDisplay").innerText = `${activeStudent.fName} ${activeStudent.lName}`;
+    
     examActive = true; 
-    shuffleArray(questions);
     totalQuestions = questions.length;
     currentQuestionIndex = 0;
     const qContainer = document.getElementById("examQuestions");
     qContainer.innerHTML = "";
     
-    // Updated HTML mapping for better mobile alignment
     questions.forEach((q, i) => {
       const optionsHtml = q.options.map((opt, j) => `
         <label class="option-container">
@@ -406,18 +301,27 @@
     startTimer(600); 
 
     document.getElementById("submitExamBtn").onclick = async () => {
-      examActive = false; clearInterval(examTimer);
-      await remove(ref(db, `activeSessions/${activeStudent.id.replace(/\//g, "_")}`));
+      examActive = false; 
+      clearInterval(examTimer);
+      
       let score = 0;
       for (let i = 0; i < questions.length; i++) {
         const sel = document.querySelector(`input[name="q${i}"]:checked`);
         if (sel && await hashData(sel.value) === questions[i].answer) score++;
       }
+      
+      // Fixed: Use currentExamName instead of reading from dropdown again
       await push(ref(db, "results"), { 
-        firstName: activeStudent.fName, lastName: activeStudent.lName, id: activeStudent.id, 
-        exam: document.getElementById("studentExamSelect").value, score, total: questions.length, 
-        finishedAt: new Date().toLocaleTimeString(), serverTime: serverTimestamp() 
+        firstName: activeStudent.fName, 
+        lastName: activeStudent.lName, 
+        id: activeStudent.id, 
+        exam: currentExamName, 
+        score: score, 
+        total: questions.length, 
+        finishedAt: new Date().toLocaleTimeString(), 
+        serverTime: serverTimestamp() 
       });
+
       document.getElementById("examQuestions").classList.add("hidden");
       document.getElementById("studentNavControls").classList.add("hidden");
       document.getElementById("submitExamBtn").classList.add("hidden");
@@ -425,44 +329,6 @@
       document.getElementById("displayScoreValue").innerText = `${score} / ${questions.length}`;
       document.getElementById("finalScoreView").classList.remove("hidden");
     };
-  }
-
-  function startTimer(seconds) {
-    let timeRemaining = seconds;
-    examTimer = setInterval(() => {
-        document.getElementById("timerDisplay").innerText = `Time: ${Math.floor(timeRemaining/60)}:${(timeRemaining%60).toString().padStart(2, '0')}`;
-        if (timeRemaining-- <= 0) { clearInterval(examTimer); document.getElementById("submitExamBtn").click(); }
-    }, 1000);
-  }
-
-  document.getElementById("instructorLoginBtn").onclick = async () => {
-    const enteredPass = document.getElementById("instructorPassword").value;
-    const snap = await get(child(ref(db), "adminConfig/instructorKey"));
-    if (snap.exists() && enteredPass === snap.val()) {
-      document.getElementById("loginContainer").classList.add("hidden");
-      document.getElementById("instructorPanel").classList.remove("hidden");
-      startLiveResults();
-      onValue(ref(db, "violations"), (s) => {
-          let h = ""; if(s.exists()) Object.values(s.val()).reverse().forEach(v => h+=`<p style="color:#e74c3c; background:rgba(255,255,255,0.1); padding:5px;">[${v.time}] <b>${v.student}</b>: ${v.type}</p>`);
-          document.getElementById("violationLogs").innerHTML = h;
-      });
-    } else { alert("Unauthorized!"); }
-  };
-
-  function startLiveResults() {
-    onValue(ref(db, "results"), (snapshot) => {
-      resultsCache = snapshot.exists() ? Object.values(snapshot.val()).reverse() : [];
-      renderResults();
-    });
-  }
-
-  function renderResults() {
-    const container = document.getElementById("studentResults");
-    let html = `<table><tr><th>Name</th><th>ID</th><th>Score</th></tr>`;
-    resultsCache.forEach(r => {
-        html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.score}/${r.total}</td></tr>`;
-    });
-    container.innerHTML = html + "</table>";
   }
 
   function showQuestion(index) {
@@ -476,7 +342,13 @@
   document.getElementById("nextBtn").onclick = () => { if (currentQuestionIndex < totalQuestions - 1) showQuestion(++currentQuestionIndex); };
   document.getElementById("prevBtn").onclick = () => { if (currentQuestionIndex > 0) showQuestion(--currentQuestionIndex); };
 
-  function shuffleArray(array) { for (let i = array.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [array[i], array[j]] = [array[j], array[i]]; } }
+  function startTimer(seconds) {
+    let timeRemaining = seconds;
+    examTimer = setInterval(() => {
+        document.getElementById("timerDisplay").innerText = `Time: ${Math.floor(timeRemaining/60)}:${(timeRemaining%60).toString().padStart(2, '0')}`;
+        if (timeRemaining-- <= 0) { clearInterval(examTimer); document.getElementById("submitExamBtn").click(); }
+    }, 1000);
+  }
 
   document.getElementById("sectionSelectStudent").onchange = async (e) => {
     const snap = await get(child(ref(db), "studentList/" + e.target.value));
@@ -489,50 +361,6 @@
       sel.appendChild(opt);
     });
   };
-
-  document.getElementById("examSelect").onchange = async (e) => {
-    const container = document.getElementById("questionsContainer");
-    if (!e.target.value) { container.innerHTML = ""; return; }
-    const snap = await get(child(ref(db), "exams/" + e.target.value));
-    container.innerHTML = "";
-    if (snap.exists()) snap.val().forEach(q => container.appendChild(createQuestionBlock(q)));
-  };
-
-  document.getElementById("addNewQuestionBtn").onclick = () => document.getElementById("questionsContainer").appendChild(createQuestionBlock());
-
-  function createQuestionBlock(qData = null) {
-    const block = document.createElement("div");
-    block.className = "question-block";
-    block.innerHTML = `
-        <button class="btn-del" onclick="this.parentElement.remove()">Del</button>
-        <input type="text" class="q-text" value="${qData ? qData.question : ''}" placeholder="Enter question...">
-        <input type="text" class="opt-1" value="${qData ? qData.options[0] : ''}" placeholder="A">
-        <input type="text" class="opt-2" value="${qData ? qData.options[1] : ''}" placeholder="B">
-        <input type="text" class="opt-3" value="${qData ? qData.options[2] : ''}" placeholder="C">
-        <input type="text" class="opt-4" value="${qData ? qData.options[3] : ''}" placeholder="D">
-        <select class="q-ans">
-            <option value="1">A</option><option value="2">B</option>
-            <option value="3">C</option><option value="4">D</option>
-        </select>`;
-    return block;
-  }
-
-  document.getElementById("saveExamBtn").onclick = async () => {
-    const examName = document.getElementById("examSelect").value;
-    if (!examName) return alert("Select subject");
-    const updatedExams = [];
-    for (const b of document.querySelectorAll("#questionsContainer .question-block")) {
-      updatedExams.push({
-        question: b.querySelector(".q-text").value,
-        options: [b.querySelector(".opt-1").value, b.querySelector(".opt-2").value, b.querySelector(".opt-3").value, b.querySelector(".opt-4").value],
-        answer: await hashData(b.querySelector(".q-ans").value)
-      });
-    }
-    await set(ref(db, "exams/" + examName), updatedExams);
-    alert("Saved!");
-  };
-
-  document.getElementById("logoutInstructor").onclick = () => location.reload();
 </script>
 </body>
 </html>
