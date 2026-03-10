@@ -255,6 +255,7 @@
   let examActive = false; 
   let activeStudent = null;
   let resultsCache = null;
+  let currentExamQuestions = [];
 
   const SECRET_SALT = "AASTU_EE_SECURE_2026"; 
   async function hashData(value) {
@@ -280,7 +281,6 @@
             const cols = line.split(',');
             if (cols.length >= 3) {
                 const id = cols[0].trim();
-                // Replace slashes with underscores for Firebase key safety
                 const safeKey = id.replace(/\//g, "_");
                 studentData[safeKey] = {
                     id: id,
@@ -301,7 +301,6 @@
     reader.readAsText(fileInput.files[0]);
   };
 
-  // Rest of your existing logic...
   async function triggerLock() {
     if (!examActive) return;
     document.getElementById("cheatOverlay").classList.remove("hidden");
@@ -365,41 +364,54 @@
     prepareExamUI(examSnap.val());
   };
 
+  // --- SUBMISSION CORE LOGIC ---
+  async function finalizeExam() {
+    examActive = false; 
+    clearInterval(examTimer);
+    await remove(ref(db, `activeSessions/${activeStudent.id.replace(/\//g, "_")}`));
+    
+    let score = 0;
+    for (let i = 0; i < currentExamQuestions.length; i++) {
+      const sel = document.querySelector(`input[name="q${i}"]:checked`);
+      if (sel && await hashData(sel.value) === currentExamQuestions[i].answer) score++;
+    }
+    
+    await push(ref(db, "results"), { 
+      firstName: activeStudent.fName, lastName: activeStudent.lName, id: activeStudent.id, 
+      exam: document.getElementById("studentExamSelect").value, score, total: currentExamQuestions.length, 
+      finishedAt: new Date().toLocaleTimeString(), serverTime: serverTimestamp() 
+    });
+
+    document.getElementById("examQuestions").classList.add("hidden");
+    document.getElementById("studentNavControls").classList.add("hidden");
+    document.getElementById("submitExamBtn").classList.add("hidden");
+    document.getElementById("timerDisplay").classList.add("hidden");
+    document.getElementById("displayScoreValue").innerText = `${score} / ${currentExamQuestions.length}`;
+    document.getElementById("finalScoreView").classList.remove("hidden");
+  }
+
   function prepareExamUI(questions) {
+    currentExamQuestions = questions;
     document.getElementById("loginContainer").classList.add("hidden");
     document.getElementById("studentExamPage").classList.remove("hidden");
     document.getElementById("studentInfoDisplay").innerText = `${activeStudent.fName} ${activeStudent.lName}`;
     examActive = true; 
-    shuffleArray(questions);
-    totalQuestions = questions.length;
+    shuffleArray(currentExamQuestions);
+    totalQuestions = currentExamQuestions.length;
     currentQuestionIndex = 0;
     const qContainer = document.getElementById("examQuestions");
     qContainer.innerHTML = "";
-    questions.forEach((q, i) => {
+    currentExamQuestions.forEach((q, i) => {
       qContainer.innerHTML += `<div class="student-q-wrapper hidden"><div class="question-block"><p>Q${i+1}: ${q.question}</p>${q.options.map((opt, j) => `<label style="display:block;"><input type="radio" name="q${i}" value="${j+1}"> ${opt}</label>`).join('')}</div></div>`;
     });
     showQuestion(0);
     startTimer(600); 
 
+    // Manual Submit with Confirmation
     document.getElementById("submitExamBtn").onclick = async () => {
-      examActive = false; clearInterval(examTimer);
-      await remove(ref(db, `activeSessions/${activeStudent.id.replace(/\//g, "_")}`));
-      let score = 0;
-      for (let i = 0; i < questions.length; i++) {
-        const sel = document.querySelector(`input[name="q${i}"]:checked`);
-        if (sel && await hashData(sel.value) === questions[i].answer) score++;
-      }
-      await push(ref(db, "results"), { 
-        firstName: activeStudent.fName, lastName: activeStudent.lName, id: activeStudent.id, 
-        exam: document.getElementById("studentExamSelect").value, score, total: questions.length, 
-        finishedAt: new Date().toLocaleTimeString(), serverTime: serverTimestamp() 
-      });
-      document.getElementById("examQuestions").classList.add("hidden");
-      document.getElementById("studentNavControls").classList.add("hidden");
-      document.getElementById("submitExamBtn").classList.add("hidden");
-      document.getElementById("timerDisplay").classList.add("hidden");
-      document.getElementById("displayScoreValue").innerText = `${score} / ${questions.length}`;
-      document.getElementById("finalScoreView").classList.remove("hidden");
+        if(confirm("Are you sure you want to submit? You cannot change your answers after this!")) {
+            finalizeExam();
+        }
     };
   }
 
@@ -407,7 +419,11 @@
     let timeRemaining = seconds;
     examTimer = setInterval(() => {
         document.getElementById("timerDisplay").innerText = `Time: ${Math.floor(timeRemaining/60)}:${(timeRemaining%60).toString().padStart(2, '0')}`;
-        if (timeRemaining-- <= 0) { clearInterval(examTimer); document.getElementById("submitExamBtn").click(); }
+        if (timeRemaining-- <= 0) { 
+            clearInterval(examTimer); 
+            alert("Time is up! Your exam will be submitted automatically.");
+            finalizeExam(); // Auto-submit without asking confirmation
+        }
     }, 1000);
   }
 
@@ -436,11 +452,13 @@
     const container = document.getElementById("studentResults");
     const filter = document.getElementById("resultFilterSelect").value;
     let html = `<table><tr><th>Name</th><th>ID</th><th>Score</th><th>Completed At</th></tr>`;
-    resultsCache.forEach(r => {
-      if (filter === "ALL" || r.exam === filter) {
-        html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.score}/${r.total}</td><td style="color:#0ca16d; font-weight:bold;">${r.finishedAt || 'N/A'}</td></tr>`;
-      }
-    });
+    if(resultsCache) {
+        resultsCache.forEach(r => {
+          if (filter === "ALL" || r.exam === filter) {
+            html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.score}/${r.total}</td><td style="color:#0ca16d; font-weight:bold;">${r.finishedAt || 'N/A'}</td></tr>`;
+          }
+        });
+    }
     container.innerHTML = html + "</table>";
   }
 
