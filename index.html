@@ -92,13 +92,6 @@
   }
 
   img { width:80px; height:80px; border-radius:50%; display: block; margin: 0 auto 10px; }
-  .management-card {
-    background: rgba(255,255,255,0.05);
-    padding: 15px;
-    border-radius: 15px;
-    margin-bottom: 20px;
-    border: 1px solid rgba(255,255,255,0.1);
-  }
   .score-card {
     text-align: center;
     padding: 40px;
@@ -113,8 +106,6 @@
     color: #0ca16d;
     margin: 20px 0;
   }
-  .btn-del { width: auto; background: #e74c3c; padding: 5px 15px; float: right; }
-  .btn-add { background: #27ae60; margin-bottom: 15px; }
   
   #timerDisplay {
     font-size: 20px;
@@ -127,7 +118,6 @@
   }
   .nav-controls { display: flex; gap: 10px; margin-top: 20px; }
   .btn-nav { background: #2980b9; }
-  .q-ans { background: #333; color: #fff; }
 
   #cheatOverlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -184,24 +174,11 @@
   <button id="studentLoginBtn">Login as Student</button>
 </div>
 
-<div class="container hidden" id="instructorPanel">
-  <div style="display:flex; justify-content: space-between; align-items: center;">
-    <h2>Instructor Dashboard</h2>
-    <button id="logoutInstructor" style="width: auto; background: #e74c3c;">Logout</button>
-  </div>
-  <div class="management-card">
-    <h3>Student Results</h3>
-    <div class="table-container">
-      <div id="studentResults"></div>
-    </div>
-  </div>
-</div>
-
 <div class="container hidden" id="studentExamPage">
   <div id="timerDisplay">Time Remaining: 10:00</div>
   <div style="display:flex; justify-content: space-between; align-items:center;">
     <h2 id="examTitle" style="font-size: 1.2rem;"></h2>
-    <div id="studentInfoDisplay" style="text-align: right; color: #0ca16d; font-weight: bold;"></div>
+    <div id="studentInfoDisplay" style="text-align: right; color: #0ca16d; font-weight: bold; font-size: 0.9rem;"></div>
   </div>
   
   <div id="examQuestions"></div>
@@ -217,7 +194,7 @@
       <div class="score-card">
           <h3>Exam Completed!</h3>
           <div class="score-circle" id="displayScoreValue">0 / 0</div>
-          <button onclick="location.reload()">Back to Home</button>
+          <button onclick="location.reload()" style="background:#510762; width: 100%;">Back to Home</button>
       </div>
   </div>
 </div>
@@ -232,8 +209,7 @@
     projectId: "exam-67a68",
     storageBucket: "exam-67a68.firebasestorage.app",
     messagingSenderId: "8047123325",
-    appId: "1:8047123325:web:438c018b4809dfb92e8a14",
-    measurementId: "G-5PSY50N9C0"
+    appId: "1:8047123325:web:438c018b4809dfb92e8a14"
   };
 
   const app = initializeApp(firebaseConfig);
@@ -244,7 +220,7 @@
   let totalQuestions = 0;
   let examActive = false; 
   let activeStudent = null;
-  let currentExamName = ""; // Fixed: Global variable to track the exam name
+  let currentExamName = ""; 
 
   const SECRET_SALT = "AASTU_EE_SECURE_2026"; 
   async function hashData(value) {
@@ -256,13 +232,11 @@
   document.getElementById("studentLoginBtn").onclick = async () => {
     const section = document.getElementById("sectionSelectStudent").value;
     const raw = document.getElementById("studentSelect").value;
-    currentExamName = document.getElementById("studentExamSelect").value; // Store the exam name
+    currentExamName = document.getElementById("studentExamSelect").value;
     
     if (!section || !raw) return alert("Select section and name");
 
-    const data = JSON.parse(raw);
-    activeStudent = data;
-    
+    activeStudent = JSON.parse(raw);
     const examSnap = await get(child(ref(db), "exams/" + currentExamName));
     if (!examSnap.exists()) return alert("Exam questions not found.");
 
@@ -273,6 +247,7 @@
     document.getElementById("loginContainer").classList.add("hidden");
     document.getElementById("studentExamPage").classList.remove("hidden");
     document.getElementById("studentInfoDisplay").innerText = `${activeStudent.fName} ${activeStudent.lName}`;
+    document.getElementById("examTitle").innerText = currentExamName;
     
     examActive = true; 
     totalQuestions = questions.length;
@@ -301,33 +276,43 @@
     startTimer(600); 
 
     document.getElementById("submitExamBtn").onclick = async () => {
+      if(!confirm("Are you sure you want to submit?")) return;
       examActive = false; 
       clearInterval(examTimer);
       
       let score = 0;
       for (let i = 0; i < questions.length; i++) {
         const sel = document.querySelector(`input[name="q${i}"]:checked`);
-        if (sel && await hashData(sel.value) === questions[i].answer) score++;
+        if (sel) {
+          const userHash = await hashData(sel.value);
+          // Check against both hashed and plain value to prevent calculation errors
+          if (userHash === questions[i].answer || sel.value == questions[i].answer) {
+            score++;
+          }
+        }
       }
       
-      // Fixed: Use currentExamName instead of reading from dropdown again
-      await push(ref(db, "results"), { 
-        firstName: activeStudent.fName, 
-        lastName: activeStudent.lName, 
-        id: activeStudent.id, 
-        exam: currentExamName, 
-        score: score, 
-        total: questions.length, 
-        finishedAt: new Date().toLocaleTimeString(), 
-        serverTime: serverTimestamp() 
-      });
+      try {
+        await push(ref(db, "results"), { 
+          firstName: activeStudent.fName, 
+          lastName: activeStudent.lName, 
+          id: activeStudent.id, 
+          exam: currentExamName, 
+          score: score, 
+          total: totalQuestions, 
+          finishedAt: new Date().toLocaleTimeString(), 
+          serverTime: serverTimestamp() 
+        });
 
-      document.getElementById("examQuestions").classList.add("hidden");
-      document.getElementById("studentNavControls").classList.add("hidden");
-      document.getElementById("submitExamBtn").classList.add("hidden");
-      document.getElementById("timerDisplay").classList.add("hidden");
-      document.getElementById("displayScoreValue").innerText = `${score} / ${questions.length}`;
-      document.getElementById("finalScoreView").classList.remove("hidden");
+        document.getElementById("examQuestions").classList.add("hidden");
+        document.getElementById("studentNavControls").classList.add("hidden");
+        document.getElementById("submitExamBtn").classList.add("hidden");
+        document.getElementById("timerDisplay").classList.add("hidden");
+        document.getElementById("displayScoreValue").innerText = `${score} / ${totalQuestions}`;
+        document.getElementById("finalScoreView").classList.remove("hidden");
+      } catch (err) {
+        alert("Submission failed. Check your internet connection.");
+      }
     };
   }
 
@@ -337,10 +322,11 @@
       const isLast = (index === totalQuestions - 1);
       document.getElementById("nextBtn").classList.toggle("hidden", isLast);
       document.getElementById("submitExamBtn").classList.toggle("hidden", !isLast);
+      currentQuestionIndex = index;
   }
 
-  document.getElementById("nextBtn").onclick = () => { if (currentQuestionIndex < totalQuestions - 1) showQuestion(++currentQuestionIndex); };
-  document.getElementById("prevBtn").onclick = () => { if (currentQuestionIndex > 0) showQuestion(--currentQuestionIndex); };
+  document.getElementById("nextBtn").onclick = () => showQuestion(currentQuestionIndex + 1);
+  document.getElementById("prevBtn").onclick = () => showQuestion(currentQuestionIndex - 1);
 
   function startTimer(seconds) {
     let timeRemaining = seconds;
