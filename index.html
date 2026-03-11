@@ -134,9 +134,6 @@
     .container { margin: 10px auto; padding: 15px; }
     h2 { font-size: 1.2rem; }
     .nav-controls { flex-direction: row; }
-    .management-card div[style*="display:grid"] {
-        grid-template-columns: 1fr !important;
-    }
   }
 </style>
 </head>
@@ -153,7 +150,7 @@
 </div>
 
 <div class="container" id="loginContainer">
-  <img src="seyoum.jpg" alt="Seyoum Nigussie">
+  <img src="seyoum.jpg" alt="Instructor Logo">
   <h2 style="text-align:center;">Online Exam System</h2>
   
   <h3>Instructor Login</h3>
@@ -295,6 +292,9 @@
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
+  // Prevents multiple submissions
+  let isSubmitting = false;
+
   document.getElementById("uploadCsvBtn").onclick = function() {
     const fileInput = document.getElementById("csvFileInput");
     const section = document.getElementById("csvSectionSelect").value;
@@ -400,18 +400,28 @@
     startTimer(600); 
 
     document.getElementById("submitExamBtn").onclick = async () => {
-      examActive = false; clearInterval(examTimer);
-      await remove(ref(db, `activeSessions/${activeStudent.id.replace(/\//g, "_")}`));
+      if (isSubmitting) return; // Prevent double submit
+      isSubmitting = true;
+      document.getElementById("submitExamBtn").disabled = true;
+      document.getElementById("submitExamBtn").innerText = "Submitting...";
+
+      examActive = false; 
+      clearInterval(examTimer);
+
       let score = 0;
       for (let i = 0; i < questions.length; i++) {
         const sel = document.querySelector(`input[name="q${i}"]:checked`);
         if (sel && await hashData(sel.value) === questions[i].answer) score++;
       }
+
       await push(ref(db, "results"), { 
         firstName: activeStudent.fName, lastName: activeStudent.lName, id: activeStudent.id, 
         exam: document.getElementById("studentExamSelect").value, score, total: questions.length, 
         finishedAt: new Date().toLocaleTimeString(), serverTime: serverTimestamp() 
       });
+
+      await remove(ref(db, `activeSessions/${activeStudent.id.replace(/\//g, "_")}`));
+
       document.getElementById("examQuestions").classList.add("hidden");
       document.getElementById("studentNavControls").classList.add("hidden");
       document.getElementById("submitExamBtn").classList.add("hidden");
@@ -425,7 +435,10 @@
     let timeRemaining = seconds;
     examTimer = setInterval(() => {
         document.getElementById("timerDisplay").innerText = `Time: ${Math.floor(timeRemaining/60)}:${(timeRemaining%60).toString().padStart(2, '0')}`;
-        if (timeRemaining-- <= 0) { clearInterval(examTimer); document.getElementById("submitExamBtn").click(); }
+        if (timeRemaining-- <= 0) { 
+            clearInterval(examTimer); 
+            if(!isSubmitting) document.getElementById("submitExamBtn").click(); 
+        }
     }, 1000);
   }
 
@@ -454,17 +467,18 @@
     const container = document.getElementById("studentResults");
     const filter = document.getElementById("resultFilterSelect").value;
     let html = `<table><tr><th>Name</th><th>ID</th><th>Score</th><th>Time</th></tr>`;
-    resultsCache.forEach(r => {
-      if (filter === "ALL" || r.exam === filter) {
-        html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.score}/${r.total}</td><td>${r.finishedAt || 'N/A'}</td></tr>`;
-      }
-    });
+    if(resultsCache){
+        resultsCache.forEach(r => {
+          if (filter === "ALL" || r.exam === filter) {
+            html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.score}/${r.total}</td><td>${r.finishedAt || 'N/A'}</td></tr>`;
+          }
+        });
+    }
     container.innerHTML = html + "</table>";
   }
 
   document.getElementById("resultFilterSelect").onchange = renderResults;
 
-  // --- NEW DOWNLOAD FUNCTIONALITY ---
   document.getElementById("downloadExcelBtn").onclick = function() {
     if (!resultsCache || resultsCache.length === 0) return alert("No results to download.");
     
@@ -486,7 +500,6 @@
     link.click();
     document.body.removeChild(link);
   };
-  // ----------------------------------
 
   function showQuestion(index) {
       document.querySelectorAll(".student-q-wrapper").forEach((q, i) => q.classList.toggle("hidden", i !== index));
