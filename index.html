@@ -55,7 +55,7 @@
     background: #fff;
     color: #000;
     border-radius: 10px;
-    display: block;
+    display: table; /* Changed from block to table for better rendering */
     overflow-x: auto;
   }
   th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; min-width: 100px; }
@@ -106,8 +106,6 @@
     color: #0ca16d;
     margin: 20px 0;
   }
-  .btn-del { width: auto; background: #e74c3c; padding: 5px 15px; float: right; }
-  .btn-add { background: #27ae60; margin-bottom: 15px; }
   #timerDisplay {
     font-size: 18px;
     background: #e74c3c;
@@ -119,8 +117,6 @@
   }
   .nav-controls { display: flex; gap: 10px; margin-top: 20px; }
   .btn-nav { background: #2980b9; }
-  .q-ans { background: #333; color: #333; }
-  .q-ans:focus { color: #fff; }
 
   #cheatOverlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -132,8 +128,6 @@
 
   @media (max-width: 600px) {
     .container { margin: 10px auto; padding: 15px; }
-    h2 { font-size: 1.2rem; }
-    .nav-controls { flex-direction: row; }
   }
 </style>
 </head>
@@ -259,7 +253,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-  import { getDatabase, ref, set, get, child, push, serverTimestamp, onValue, remove } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-database.js";
+  import { getDatabase, ref, set, get, child, push, onValue } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-database.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyAQt0xCxcXJHHg5O-J6dzAdwQ6RxofscFo",
@@ -277,7 +271,6 @@
   let examTimer;
   let currentQuestionIndex = 0;
   let totalQuestions = 0;
-  let examActive = false; 
   let activeStudent = null;
   let studentSection = ""; 
   let resultsCache = [];
@@ -289,24 +282,28 @@
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  // --- IMPROVED RENDER FUNCTION ---
+  // --- FIXED RENDER FUNCTION ---
   function renderResults() {
     const container = document.getElementById("studentResults");
     const sectionFilter = document.getElementById("resultSectionFilterSelect").value;
     
     if (!resultsCache || resultsCache.length === 0) {
-        container.innerHTML = "<p style='color:black; text-align:center; padding:10px;'>No results found in database.</p>";
+        container.innerHTML = "<p style='color:black; text-align:center; background:white; padding:15px; border-radius:10px;'>Waiting for data from database...</p>";
         return;
     }
 
     let html = `<table><tr><th>Section</th><th>Name</th><th>ID</th><th>Score</th><th>Submitted</th></tr>`;
-    let count = 0;
+    let found = 0;
 
     resultsCache.forEach(r => {
-      if (sectionFilter === "ALL" || r.section === sectionFilter) {
-        count++;
+      // Improved comparison: Trim whitespace and ignore case to ensure "Section_C" matches
+      const dbSection = (r.section || "").trim().toUpperCase();
+      const filterValue = sectionFilter.trim().toUpperCase();
+
+      if (sectionFilter === "ALL" || dbSection === filterValue) {
+        found++;
         html += `<tr>
-            <td style="font-weight:bold; color:#510762;">${r.section || 'N/A'}</td>
+            <td style="font-weight:bold; color:#510762;">${r.section}</td>
             <td>${r.firstName} ${r.lastName}</td>
             <td>${r.id}</td>
             <td>${r.score}/${r.total}</td>
@@ -315,22 +312,19 @@
       }
     });
 
-    if (count === 0) {
-        container.innerHTML = `<p style='color:black; text-align:center; padding:10px;'>No results for ${sectionFilter}.</p>`;
+    if (found === 0) {
+        container.innerHTML = `<p style='color:black; text-align:center; background:white; padding:15px; border-radius:10px;'>No results found for ${sectionFilter.replace('_',' ')}.</p>`;
     } else {
         container.innerHTML = html + "</table>";
     }
   }
 
-  // --- INSTRUCTOR LOGIN ---
+  // --- INSTRUCTOR DASHBOARD ---
   document.getElementById("instructorLoginBtn").onclick = async () => {
-    const enteredPass = document.getElementById("instructorPassword").value;
-    // Hardcoded simple admin check for now, can be replaced with Firebase check
-    if (enteredPass === "admin") {
+    if (document.getElementById("instructorPassword").value === "admin") {
       document.getElementById("loginContainer").classList.add("hidden");
       document.getElementById("instructorPanel").classList.remove("hidden");
       
-      // Fetch and Listen to Results Live
       const resultsRef = ref(db, "results");
       onValue(resultsRef, (snapshot) => {
         if (snapshot.exists()) {
@@ -338,17 +332,14 @@
         } else {
             resultsCache = [];
         }
-        renderResults();
+        renderResults(); // This will now properly filter Section C
       });
-    } else {
-      alert("Unauthorized access.");
     }
   };
 
-  // Update table when dropdown changes
   document.getElementById("resultSectionFilterSelect").onchange = renderResults;
 
-  // --- STUDENT LOGIN & EXAM LOGIC ---
+  // --- STUDENT FLOW ---
   document.getElementById("sectionSelectStudent").onchange = async (e) => {
     const section = e.target.value;
     if(!section) return;
@@ -368,16 +359,13 @@
   document.getElementById("studentLoginBtn").onclick = async () => {
     const section = document.getElementById("sectionSelectStudent").value;
     const raw = document.getElementById("studentSelect").value;
-    const exam = "Engineering Thermodynamics";
-
     if (!section || !raw) return alert("Select section and name.");
     
     activeStudent = JSON.parse(raw);
     studentSection = section; 
 
-    const examSnap = await get(child(ref(db), "exams/" + exam));
+    const examSnap = await get(child(ref(db), "exams/Engineering Thermodynamics"));
     if (!examSnap.exists()) return alert("Exam questions not found.");
-
     prepareExamUI(examSnap.val());
   };
 
@@ -385,10 +373,8 @@
     document.getElementById("loginContainer").classList.add("hidden");
     document.getElementById("studentExamPage").classList.remove("hidden");
     document.getElementById("studentInfoDisplay").innerText = `${activeStudent.fName} - ${studentSection}`;
-    examActive = true; 
-    shuffleArray(questions);
-    totalQuestions = questions.length;
     
+    totalQuestions = questions.length;
     const qContainer = document.getElementById("examQuestions");
     qContainer.innerHTML = "";
     questions.forEach((q, i) => {
@@ -398,7 +384,6 @@
     startTimer(600); 
 
     document.getElementById("submitExamBtn").onclick = async () => {
-      examActive = false; 
       clearInterval(examTimer);
       let score = 0;
       for (let i = 0; i < questions.length; i++) {
@@ -407,12 +392,9 @@
       }
 
       await push(ref(db, "results"), { 
-        firstName: activeStudent.fName, 
-        lastName: activeStudent.lName, 
-        id: activeStudent.id, 
-        section: studentSection,
-        exam: "Engineering Thermodynamics",
-        score, total: questions.length, 
+        firstName: activeStudent.fName, lastName: activeStudent.lName, 
+        id: activeStudent.id, section: studentSection,
+        exam: "Engineering Thermodynamics", score, total: questions.length, 
         finishedAt: new Date().toLocaleTimeString()
       });
 
@@ -422,12 +404,10 @@
     };
   }
 
-  // --- HELPERS ---
   function startTimer(s) { examTimer = setInterval(() => { document.getElementById("timerDisplay").innerText = `Time: ${Math.floor(s/60)}:${(s%60).toString().padStart(2, '0')}`; if (s-- <= 0) document.getElementById("submitExamBtn").click(); }, 1000); }
   function showQuestion(index) { document.querySelectorAll(".student-q-wrapper").forEach((q, i) => q.classList.toggle("hidden", i !== index)); document.getElementById("prevBtn").disabled = (index === 0); document.getElementById("nextBtn").classList.toggle("hidden", index === totalQuestions - 1); document.getElementById("submitExamBtn").classList.toggle("hidden", index !== totalQuestions - 1); }
   document.getElementById("nextBtn").onclick = () => showQuestion(++currentQuestionIndex);
   document.getElementById("prevBtn").onclick = () => showQuestion(--currentQuestionIndex);
-  function shuffleArray(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } }
   document.getElementById("logoutInstructor").onclick = () => location.reload();
 </script>
 </body>
