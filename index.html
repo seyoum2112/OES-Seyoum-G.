@@ -55,7 +55,7 @@
     background: #fff;
     color: #000;
     border-radius: 10px;
-    display: table; /* Changed from block to table for better rendering */
+    display: block;
     overflow-x: auto;
   }
   th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; min-width: 100px; }
@@ -106,6 +106,8 @@
     color: #0ca16d;
     margin: 20px 0;
   }
+  .btn-del { width: auto; background: #e74c3c; padding: 5px 15px; float: right; }
+  .btn-add { background: #27ae60; margin-bottom: 15px; }
   #timerDisplay {
     font-size: 18px;
     background: #e74c3c;
@@ -117,6 +119,8 @@
   }
   .nav-controls { display: flex; gap: 10px; margin-top: 20px; }
   .btn-nav { background: #2980b9; }
+  .q-ans { background: #333; color: #333; }
+  .q-ans:focus { color: #fff; }
 
   #cheatOverlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -128,6 +132,8 @@
 
   @media (max-width: 600px) {
     .container { margin: 10px auto; padding: 15px; }
+    h2 { font-size: 1.2rem; }
+    .nav-controls { flex-direction: row; }
   }
 </style>
 </head>
@@ -282,78 +288,72 @@
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  // --- FIXED RENDER FUNCTION ---
+  // FIXED: Consolidated Render Function that handles Course AND Section
   function renderResults() {
     const container = document.getElementById("studentResults");
     const sectionFilter = document.getElementById("resultSectionFilterSelect").value;
+    const targetCourse = "Engineering Thermodynamics"; // Course name from the dashboard
     
-    if (!resultsCache || resultsCache.length === 0) {
-        container.innerHTML = "<p style='color:black; text-align:center; background:white; padding:15px; border-radius:10px;'>Waiting for data from database...</p>";
-        return;
+    let html = `<table><tr><th>Section</th><th>Name</th><th>ID</th><th>Score</th><th>Submitted</th></tr>`;
+    let count = 0;
+
+    if(resultsCache && resultsCache.length > 0){
+        resultsCache.forEach(r => {
+          // Check if it belongs to the thermodynamics course AND matches section filter
+          const matchesCourse = (r.exam === targetCourse);
+          const matchesSection = (sectionFilter === "ALL" || r.section === sectionFilter);
+
+          if (matchesCourse && matchesSection) {
+            count++;
+            html += `<tr>
+                <td style="font-weight:bold; color:#510762;">${r.section}</td>
+                <td>${r.firstName} ${r.lastName}</td>
+                <td>${r.id}</td>
+                <td>${r.score}/${r.total}</td>
+                <td>${r.finishedAt || 'N/A'}</td>
+            </tr>`;
+          }
+        });
     }
 
-    let html = `<table><tr><th>Section</th><th>Name</th><th>ID</th><th>Score</th><th>Submitted</th></tr>`;
-    let found = 0;
-
-    resultsCache.forEach(r => {
-      // Improved comparison: Trim whitespace and ignore case to ensure "Section_C" matches
-      const dbSection = (r.section || "").trim().toUpperCase();
-      const filterValue = sectionFilter.trim().toUpperCase();
-
-      if (sectionFilter === "ALL" || dbSection === filterValue) {
-        found++;
-        html += `<tr>
-            <td style="font-weight:bold; color:#510762;">${r.section}</td>
-            <td>${r.firstName} ${r.lastName}</td>
-            <td>${r.id}</td>
-            <td>${r.score}/${r.total}</td>
-            <td>${r.finishedAt || 'N/A'}</td>
-        </tr>`;
-      }
-    });
-
-    if (found === 0) {
-        container.innerHTML = `<p style='color:black; text-align:center; background:white; padding:15px; border-radius:10px;'>No results found for ${sectionFilter.replace('_',' ')}.</p>`;
+    if(count === 0) {
+        container.innerHTML = `<div style="color:black; padding:20px; text-align:center; background:#fff; border-radius:10px;">No results found for ${sectionFilter} in ${targetCourse}</div>`;
     } else {
         container.innerHTML = html + "</table>";
     }
   }
 
-  // --- INSTRUCTOR DASHBOARD ---
-  document.getElementById("instructorLoginBtn").onclick = async () => {
+  // --- INSTRUCTOR ACTIONS ---
+  document.getElementById("instructorLoginBtn").onclick = () => {
     if (document.getElementById("instructorPassword").value === "admin") {
       document.getElementById("loginContainer").classList.add("hidden");
       document.getElementById("instructorPanel").classList.remove("hidden");
       
-      const resultsRef = ref(db, "results");
-      onValue(resultsRef, (snapshot) => {
-        if (snapshot.exists()) {
-            resultsCache = Object.values(snapshot.val()).reverse();
-        } else {
-            resultsCache = [];
-        }
-        renderResults(); // This will now properly filter Section C
+      // Start Live Listener immediately on login
+      onValue(ref(db, "results"), (snapshot) => {
+        resultsCache = snapshot.exists() ? Object.values(snapshot.val()).reverse() : [];
+        renderResults();
       });
+    } else {
+        alert("Incorrect Admin Password");
     }
   };
 
   document.getElementById("resultSectionFilterSelect").onchange = renderResults;
+  document.getElementById("logoutInstructor").onclick = () => location.reload();
 
-  // --- STUDENT FLOW ---
+  // --- STUDENT ACTIONS ---
   document.getElementById("sectionSelectStudent").onchange = async (e) => {
     const section = e.target.value;
-    if(!section) return;
     const snap = await get(child(ref(db), "studentList/" + section));
     const sel = document.getElementById("studentSelect");
     sel.innerHTML = '<option value="">-- Select Your Name --</option>';
-    if(snap.exists()) {
-        Object.values(snap.val()).forEach(s => {
-          const opt = document.createElement("option");
-          opt.value = JSON.stringify({id: s.id, fName: s.firstName, lName: s.lastName});
-          opt.textContent = `${s.firstName} ${s.lastName} (${s.id})`;
-          sel.appendChild(opt);
-        });
-    }
+    if(snap.exists()) Object.values(snap.val()).forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = JSON.stringify({id: s.id, fName: s.firstName, lName: s.lastName});
+      opt.textContent = `${s.firstName} ${s.lastName} (${s.id})`;
+      sel.appendChild(opt);
+    });
   };
 
   document.getElementById("studentLoginBtn").onclick = async () => {
@@ -363,9 +363,8 @@
     
     activeStudent = JSON.parse(raw);
     studentSection = section; 
-
     const examSnap = await get(child(ref(db), "exams/Engineering Thermodynamics"));
-    if (!examSnap.exists()) return alert("Exam questions not found.");
+    if (!examSnap.exists()) return alert("Exam not found.");
     prepareExamUI(examSnap.val());
   };
 
@@ -374,6 +373,7 @@
     document.getElementById("studentExamPage").classList.remove("hidden");
     document.getElementById("studentInfoDisplay").innerText = `${activeStudent.fName} - ${studentSection}`;
     
+    shuffleArray(questions);
     totalQuestions = questions.length;
     const qContainer = document.getElementById("examQuestions");
     qContainer.innerHTML = "";
@@ -408,7 +408,7 @@
   function showQuestion(index) { document.querySelectorAll(".student-q-wrapper").forEach((q, i) => q.classList.toggle("hidden", i !== index)); document.getElementById("prevBtn").disabled = (index === 0); document.getElementById("nextBtn").classList.toggle("hidden", index === totalQuestions - 1); document.getElementById("submitExamBtn").classList.toggle("hidden", index !== totalQuestions - 1); }
   document.getElementById("nextBtn").onclick = () => showQuestion(++currentQuestionIndex);
   document.getElementById("prevBtn").onclick = () => showQuestion(--currentQuestionIndex);
-  document.getElementById("logoutInstructor").onclick = () => location.reload();
+  function shuffleArray(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } }
 </script>
 </body>
 </html>
