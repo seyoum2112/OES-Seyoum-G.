@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Online Exam System</title>
+<title>Online Exam System - Thermodynamics</title>
 <style>
   body {
     font-family: "Segoe UI", Arial, sans-serif;
@@ -225,13 +225,29 @@
   <hr>
   <h3>Student Results</h3>
   <div class="management-card">
-      <select id="resultFilterSelect">
-          <option value="ALL">-- Show All Results --</option>
-          <option value="Engineering Thermodynamics">Engineering Thermodynamics</option>
-          <option value="Fluid mechanics">Emerging Technology</option>
-          <option value="Turbomachinery">Turbomachinery</option>
-      </select>
-      <button id="downloadExcelBtn" style="background: #2980b9; margin-top: 10px;">Download Results (Excel/CSV)</button>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div>
+            <label>Filter by Course:</label>
+            <select id="resultFilterSelect">
+                <option value="ALL">-- All Courses --</option>
+                <option value="Engineering Thermodynamics">Engineering Thermodynamics</option>
+                <option value="Fluid mechanics">Emerging Technology</option>
+                <option value="Turbomachinery">Turbomachinery</option>
+            </select>
+          </div>
+          <div>
+            <label>Filter by Section:</label>
+            <select id="resultSectionFilterSelect">
+                <option value="ALL">-- All Sections --</option>
+                <option value="Section_A">Section A</option>
+                <option value="Section_C">Section C</option>
+                <option value="Section_D">Section D</option>
+                <option value="Section_E">Section E</option>
+                <option value="Section_8">Section 8</option>
+            </select>
+          </div>
+      </div>
+      <button id="downloadExcelBtn" style="background: #2980b9; margin-top: 10px;">Download Filtered Results (CSV)</button>
   </div>
   <div id="studentResults"></div>
 </div>
@@ -283,6 +299,7 @@
   let totalQuestions = 0;
   let examActive = false; 
   let activeStudent = null;
+  let activeSection = ""; // Track section student logged in with
   let resultsCache = null;
 
   const SECRET_SALT = "AASTU_EE_SECURE_2026"; 
@@ -353,8 +370,8 @@
 
     const data = JSON.parse(raw);
     activeStudent = data;
+    activeSection = section; // Save section for result submission
 
-    // --- ENFORCED NO RETAKE CHECK ---
     const resultsSnap = await get(child(ref(db), "results"));
     if (resultsSnap.exists()) {
         const alreadySubmitted = Object.values(resultsSnap.val()).some(r => r.id === data.id && r.exam === exam);
@@ -383,14 +400,14 @@
     const examSnap = await get(child(ref(db), "exams/" + exam));
     if (!examSnap.exists()) return alert("Exam questions not found.");
 
-    await set(ref(db, sessionPath), { status: "active", exam: exam });
+    await set(ref(db, sessionPath), { status: "active", exam: exam, section: section });
     prepareExamUI(examSnap.val());
   };
 
   function prepareExamUI(questions) {
     document.getElementById("loginContainer").classList.add("hidden");
     document.getElementById("studentExamPage").classList.remove("hidden");
-    document.getElementById("studentInfoDisplay").innerText = `${activeStudent.fName} ${activeStudent.lName}`;
+    document.getElementById("studentInfoDisplay").innerText = `${activeStudent.fName} ${activeStudent.lName} (${activeSection})`;
     examActive = true; 
     shuffleArray(questions);
     totalQuestions = questions.length;
@@ -419,9 +436,15 @@
       }
 
       await push(ref(db, "results"), { 
-        firstName: activeStudent.fName, lastName: activeStudent.lName, id: activeStudent.id, 
-        exam: document.getElementById("studentExamSelect").value, score, total: questions.length, 
-        finishedAt: new Date().toLocaleTimeString(), serverTime: serverTimestamp() 
+        firstName: activeStudent.fName, 
+        lastName: activeStudent.lName, 
+        id: activeStudent.id, 
+        section: activeSection,
+        exam: document.getElementById("studentExamSelect").value, 
+        score, 
+        total: questions.length, 
+        finishedAt: new Date().toLocaleTimeString(), 
+        serverTime: serverTimestamp() 
       });
 
       await remove(ref(db, `activeSessions/${activeStudent.id.replace(/\//g, "_")}`));
@@ -469,12 +492,17 @@
 
   function renderResults() {
     const container = document.getElementById("studentResults");
-    const filter = document.getElementById("resultFilterSelect").value;
-    let html = `<table><tr><th>Name</th><th>ID</th><th>Score</th><th>Time</th></tr>`;
+    const courseFilter = document.getElementById("resultFilterSelect").value;
+    const sectionFilter = document.getElementById("resultSectionFilterSelect").value;
+    
+    let html = `<table><tr><th>Name</th><th>ID</th><th>Section</th><th>Score</th><th>Time</th></tr>`;
     if(resultsCache){
         resultsCache.forEach(r => {
-          if (filter === "ALL" || r.exam === filter) {
-            html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.score}/${r.total}</td><td>${r.finishedAt || 'N/A'}</td></tr>`;
+          const courseMatch = (courseFilter === "ALL" || r.exam === courseFilter);
+          const sectionMatch = (sectionFilter === "ALL" || r.section === sectionFilter);
+          
+          if (courseMatch && sectionMatch) {
+            html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.section || 'N/A'}</td><td>${r.score}/${r.total}</td><td>${r.finishedAt || 'N/A'}</td></tr>`;
           }
         });
     }
@@ -482,16 +510,22 @@
   }
 
   document.getElementById("resultFilterSelect").onchange = renderResults;
+  document.getElementById("resultSectionFilterSelect").onchange = renderResults;
 
   document.getElementById("downloadExcelBtn").onclick = function() {
     if (!resultsCache || resultsCache.length === 0) return alert("No results to download.");
     
-    const filter = document.getElementById("resultFilterSelect").value;
-    let csvContent = "data:text/csv;charset=utf-8,First Name,Last Name,ID,Exam,Score,Total,Finished Time\n";
+    const courseFilter = document.getElementById("resultFilterSelect").value;
+    const sectionFilter = document.getElementById("resultSectionFilterSelect").value;
+    
+    let csvContent = "data:text/csv;charset=utf-8,First Name,Last Name,ID,Section,Exam,Score,Total,Finished Time\n";
 
     resultsCache.forEach(r => {
-      if (filter === "ALL" || r.exam === filter) {
-        const row = [r.firstName, r.lastName, r.id, r.exam, r.score, r.total, r.finishedAt];
+      const courseMatch = (courseFilter === "ALL" || r.exam === courseFilter);
+      const sectionMatch = (sectionFilter === "ALL" || r.section === sectionFilter);
+
+      if (courseMatch && sectionMatch) {
+        const row = [r.firstName, r.lastName, r.id, r.section || 'N/A', r.exam, r.score, r.total, r.finishedAt];
         csvContent += row.join(",") + "\n";
       }
     });
@@ -499,7 +533,7 @@
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Exam_Results_${filter.replace(/\s+/g, '_')}.csv`);
+    link.setAttribute("download", `Results_${courseFilter}_${sectionFilter}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
