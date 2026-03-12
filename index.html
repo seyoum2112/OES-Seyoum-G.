@@ -225,30 +225,31 @@
   <hr>
   <h3>Student Results</h3>
   <div class="management-card">
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <div>
-            <label>1. Select Course:</label>
-            <select id="courseFilter">
-                <option value="">-- Choose Course --</option>
-                <option value="Engineering Thermodynamics">Engineering Thermodynamics</option>
-                <option value="Fluid mechanics">Emerging Technology</option>
-                <option value="Turbomachinery">Turbomachinery</option>
-            </select>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 200px;">
+              <label>1. Select Course:</label>
+              <select id="courseFilter">
+                  <option value="">-- Choose Course --</option>
+                  <option value="Engineering Thermodynamics">Engineering Thermodynamics</option>
+                  <option value="Fluid mechanics">Emerging Technology</option>
+                  <option value="Turbomachinery">Turbomachinery</option>
+              </select>
           </div>
-          <div>
-            <label>2. Select Section:</label>
-            <select id="sectionFilter">
-                <option value="">-- Choose Section --</option>
-                <option value="Section_A">Section A</option>
-                <option value="Section_C">Section C</option>
-                <option value="Section_D">Section D</option>
-                <option value="Section_E">Section E</option>
-                <option value="Section_8">Section 8</option>
-            </select>
+          <div style="flex: 1; min-width: 200px;">
+              <label>2. Select Section:</label>
+              <select id="sectionFilter">
+                  <option value="">-- Choose Section --</option>
+                  <option value="Section_A">Section A</option>
+                  <option value="Section_C">Section C</option>
+                  <option value="Section_D">Section D</option>
+                  <option value="Section_E">Section E</option>
+                  <option value="Section_8">Section 8</option>
+              </select>
           </div>
       </div>
-      <button id="fetchResultsBtn" style="background: #27ae60; margin-top: 15px;">Display Results</button>
-      <button id="downloadExcelBtn" style="background: #2980b9; margin-top: 10px;">Download (CSV)</button>
+      
+      <button id="fetchResultsBtn" style="background: #27ae60; margin-top: 15px;">View Filtered Results</button>
+      <button id="downloadExcelBtn" style="background: #2980b9; margin-top: 10px;">Download These Results (CSV)</button>
   </div>
   <div id="studentResults"></div>
 </div>
@@ -301,7 +302,6 @@
   let examActive = false; 
   let activeStudent = null;
   let resultsCache = [];
-  let isSubmitting = false;
 
   const SECRET_SALT = "AASTU_EE_SECURE_2026"; 
   async function hashData(value) {
@@ -310,7 +310,8 @@
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  // STUDENT MANAGEMENT CSV UPLOAD
+  let isSubmitting = false;
+
   document.getElementById("uploadCsvBtn").onclick = function() {
     const fileInput = document.getElementById("csvFileInput");
     const section = document.getElementById("csvSectionSelect").value;
@@ -337,7 +338,6 @@
     reader.readAsText(fileInput.files[0]);
   };
 
-  // CHEATING PREVENTION
   async function triggerLock() {
     if (!examActive) return;
     document.getElementById("cheatOverlay").classList.remove("hidden");
@@ -363,7 +363,6 @@
     } else { alert("Incorrect Instructor Passcode."); }
   };
 
-  // STUDENT LOGIN & EXAM START
   document.getElementById("studentLoginBtn").onclick = async () => {
     const section = document.getElementById("sectionSelectStudent").value;
     const raw = document.getElementById("studentSelect").value;
@@ -373,7 +372,7 @@
     const data = JSON.parse(raw);
     activeStudent = { ...data, section };
 
-    // Retake Prevention
+    // RETAKE CHECK - checks the specific path for the student
     const checkPath = `results/${exam}/${section}`;
     const resultsSnap = await get(child(ref(db), checkPath));
     if (resultsSnap.exists()) {
@@ -439,12 +438,13 @@
       const examType = document.getElementById("studentExamSelect").value;
       const sectionKey = activeStudent.section || "Unknown";
       
-      // Store in separated Course/Section path
+      // Separate submission by Exam and Section
       const resultsPath = `results/${examType}/${sectionKey}`;
 
       await push(ref(db, resultsPath), { 
         firstName: activeStudent.fName, lastName: activeStudent.lName, id: activeStudent.id, 
-        exam: examType, section: sectionKey,
+        exam: examType,
+        section: activeStudent.section || null,
         score, total: questions.length, 
         finishedAt: new Date().toLocaleTimeString(), serverTime: serverTimestamp() 
       });
@@ -460,7 +460,6 @@
     };
   }
 
-  // TIMER & NAVIGATION
   function startTimer(seconds) {
     let timeRemaining = seconds;
     examTimer = setInterval(() => {
@@ -472,19 +471,6 @@
     }, 1000);
   }
 
-  function showQuestion(index) {
-      document.querySelectorAll(".student-q-wrapper").forEach((q, i) => q.classList.toggle("hidden", i !== index));
-      document.getElementById("prevBtn").disabled = (index === 0);
-      const isLast = (index === totalQuestions - 1);
-      document.getElementById("nextBtn").classList.toggle("hidden", isLast);
-      document.getElementById("submitExamBtn").classList.toggle("hidden", !isLast);
-  }
-
-  document.getElementById("nextBtn").onclick = () => { if (currentQuestionIndex < totalQuestions - 1) showQuestion(++currentQuestionIndex); };
-  document.getElementById("prevBtn").onclick = () => { if (currentQuestionIndex > 0) showQuestion(--currentQuestionIndex); };
-  function shuffleArray(array) { for (let i = array.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [array[i], array[j]] = [array[j], array[i]]; } }
-
-  // INSTRUCTOR DASHBOARD LOGIC
   document.getElementById("instructorLoginBtn").onclick = async () => {
     const enteredPass = document.getElementById("instructorPassword").value;
     const snap = await get(child(ref(db), "adminConfig/instructorKey"));
@@ -498,54 +484,106 @@
     } else { alert("Unauthorized!"); }
   };
 
-  // DISPLAY FILTERED RESULTS
   let resultsUnsub = null;
-  document.getElementById("fetchResultsBtn").onclick = function() {
+
+  async function updateResultsView() {
     const course = document.getElementById("courseFilter").value;
     const section = document.getElementById("sectionFilter").value;
 
-    if (!course || !section) return alert("Please select both a Course and a Section.");
+    if (!course || !section) {
+      alert("Please select both a Course and a Section first.");
+      return;
+    }
 
-    if (resultsUnsub) resultsUnsub(); 
+    if (resultsUnsub) {
+      resultsUnsub();
+      resultsUnsub = null;
+    }
 
     const path = `results/${course}/${section}`;
-    resultsUnsub = onValue(ref(db, path), (snapshot) => {
-      const container = document.getElementById("studentResults");
-      resultsCache = snapshot.exists() ? Object.values(snapshot.val()).reverse() : [];
-      
-      let html = `<h4>Viewing: ${course} (${section})</h4>`;
-      html += `<table><tr><th>Name</th><th>ID</th><th>Score</th><th>Total</th><th>Finished At</th></tr>`;
-      
-      if (resultsCache.length > 0) {
-        resultsCache.forEach(r => {
-          html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.score}</td><td>${r.total}</td><td>${r.finishedAt}</td></tr>`;
-        });
-      } else {
-        html += `<tr><td colspan="5" style="text-align:center;">No submissions found for this specific filter.</td></tr>`;
-      }
-      container.innerHTML = html + "</table>";
-    });
-  };
+    const resultsRef = ref(db, path);
 
-  // DOWNLOAD CSV
+    resultsUnsub = onValue(resultsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        resultsCache = Object.values(snapshot.val()).reverse();
+      } else {
+        resultsCache = [];
+      }
+      renderResultsTable(course, section);
+    });
+  }
+
+  function renderResultsTable(course, section) {
+    const container = document.getElementById("studentResults");
+    let html = `<h4>Results for ${course} - ${section}</h4>`;
+    html += `<table><tr><th>Name</th><th>ID</th><th>Score</th><th>Total</th><th>Time</th></tr>`;
+    
+    if (resultsCache.length > 0) {
+      resultsCache.forEach(r => {
+        html += `<tr>
+          <td>${r.firstName} ${r.lastName}</td>
+          <td>${r.id}</td>
+          <td>${r.score}</td>
+          <td>${r.total}</td>
+          <td>${r.finishedAt || 'N/A'}</td>
+        </tr>`;
+      });
+    } else {
+      html += `<tr><td colspan="5" style="text-align:center; padding: 20px;">No submissions found for this specific selection.</td></tr>`;
+    }
+    
+    container.innerHTML = html + "</table>";
+  }
+
+  document.getElementById("fetchResultsBtn").onclick = updateResultsView;
+
   document.getElementById("downloadExcelBtn").onclick = function() {
-    if (resultsCache.length === 0) return alert("No results to download.");
+    if (!resultsCache || resultsCache.length === 0) return alert("No results displayed to download.");
+    
     const course = document.getElementById("courseFilter").value;
     const section = document.getElementById("sectionFilter").value;
     
-    let csvContent = "data:text/csv;charset=utf-8,FirstName,LastName,ID,Score,Total,Time\n";
+    let csvContent = "data:text/csv;charset=utf-8,First Name,Last Name,ID,Course,Section,Score,Total,Finished Time\n";
+
     resultsCache.forEach(r => {
-      csvContent += `${r.firstName},${r.lastName},${r.id},${r.score},${r.total},${r.finishedAt}\n`;
+      const row = [r.firstName, r.lastName, r.id, course, section, r.score, r.total, r.finishedAt];
+      csvContent += row.join(",") + "\n";
     });
+
+    const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
-    link.setAttribute("href", encodeURI(csvContent));
+    link.setAttribute("href", encodedUri);
     link.setAttribute("download", `Results_${course}_${section}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // EXAM QUESTIONS MANAGEMENT
+  function showQuestion(index) {
+      document.querySelectorAll(".student-q-wrapper").forEach((q, i) => q.classList.toggle("hidden", i !== index));
+      document.getElementById("prevBtn").disabled = (index === 0);
+      const isLast = (index === totalQuestions - 1);
+      document.getElementById("nextBtn").classList.toggle("hidden", isLast);
+      document.getElementById("submitExamBtn").classList.toggle("hidden", !isLast);
+  }
+
+  document.getElementById("nextBtn").onclick = () => { if (currentQuestionIndex < totalQuestions - 1) showQuestion(++currentQuestionIndex); };
+  document.getElementById("prevBtn").onclick = () => { if (currentQuestionIndex > 0) showQuestion(--currentQuestionIndex); };
+
+  function shuffleArray(array) { for (let i = array.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [array[i], array[j]] = [array[j], array[i]]; } }
+
+  document.getElementById("sectionSelectStudent").onchange = async (e) => {
+    const snap = await get(child(ref(db), "studentList/" + e.target.value));
+    const sel = document.getElementById("studentSelect");
+    sel.innerHTML = '<option value="">-- Select Your Name --</option>';
+    if(snap.exists()) Object.values(snap.val()).forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = JSON.stringify({id: s.id, fName: s.firstName, lName: s.lastName});
+      opt.textContent = `${s.firstName} ${s.lastName} (${s.id})`;
+      sel.appendChild(opt);
+    });
+  };
+
   document.getElementById("examSelect").onchange = async (e) => {
     const container = document.getElementById("questionsContainer");
     if (!e.target.value) { container.innerHTML = ""; return; }
@@ -576,19 +614,6 @@
     }
     await set(ref(db, "exams/" + examName), updatedExams);
     alert("Saved!");
-  };
-
-  // STUDENT NAMES AUTO-LOAD
-  document.getElementById("sectionSelectStudent").onchange = async (e) => {
-    const snap = await get(child(ref(db), "studentList/" + e.target.value));
-    const sel = document.getElementById("studentSelect");
-    sel.innerHTML = '<option value="">-- Select Your Name --</option>';
-    if(snap.exists()) Object.values(snap.val()).forEach(s => {
-      const opt = document.createElement("option");
-      opt.value = JSON.stringify({id: s.id, fName: s.firstName, lName: s.lastName});
-      opt.textContent = `${s.firstName} ${s.lastName} (${s.id})`;
-      sel.appendChild(opt);
-    });
   };
 
   document.getElementById("logoutInstructor").onclick = () => location.reload();
