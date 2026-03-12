@@ -225,12 +225,30 @@
   <hr>
   <h3>Student Results</h3>
   <div class="management-card">
-      <label>Select Course &amp; Section:</label>
-      <select id="resultGroupSelect">
-          <option value="">-- Choose Course &amp; Section --</option>
-          <!-- Options are filled by script so that each entry is course+section -->
-      </select>
-      <button id="downloadExcelBtn" style="background: #2980b9; margin-top: 10px;">Download Results (Excel/CSV)</button>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div>
+            <label>1. Select Course:</label>
+            <select id="courseFilter">
+                <option value="">-- Choose Course --</option>
+                <option value="Engineering Thermodynamics">Engineering Thermodynamics</option>
+                <option value="Fluid mechanics">Emerging Technology</option>
+                <option value="Turbomachinery">Turbomachinery</option>
+            </select>
+          </div>
+          <div>
+            <label>2. Select Section:</label>
+            <select id="sectionFilter">
+                <option value="">-- Choose Section --</option>
+                <option value="Section_A">Section A</option>
+                <option value="Section_C">Section C</option>
+                <option value="Section_D">Section D</option>
+                <option value="Section_E">Section E</option>
+                <option value="Section_8">Section 8</option>
+            </select>
+          </div>
+      </div>
+      <button id="fetchResultsBtn" style="background: #27ae60; margin-top: 15px;">Display Results</button>
+      <button id="downloadExcelBtn" style="background: #2980b9; margin-top: 10px;">Download (CSV)</button>
   </div>
   <div id="studentResults"></div>
 </div>
@@ -282,28 +300,8 @@
   let totalQuestions = 0;
   let examActive = false; 
   let activeStudent = null;
-  let resultsCache = null;
-
-  // Map each course to the sections that actually take it.
-  const COURSE_SECTIONS = {
-    "Engineering Thermodynamics": ["Section_C", "Section_D", "Section_E"],
-    "Fluid mechanics": ["Section_A", "Section_8", "Section_C", "Section_D", "Section_E"],
-    "Turbomachinery": ["Section_A", "Section_8", "Section_C", "Section_D", "Section_E"]
-  };
-
-  const SECTION_LABELS = {
-    "Section_A": "Section A",
-    "Section_C": "Section C",
-    "Section_D": "Section D",
-    "Section_E": "Section E",
-    "Section_8": "Section 8"
-  };
-
-  const COURSE_LABELS = {
-    "Engineering Thermodynamics": "Engineering Thermodynamics",
-    "Fluid mechanics": "Emerging Technology",
-    "Turbomachinery": "Turbomachinery"
-  };
+  let resultsCache = [];
+  let isSubmitting = false;
 
   const SECRET_SALT = "AASTU_EE_SECURE_2026"; 
   async function hashData(value) {
@@ -312,8 +310,7 @@
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  let isSubmitting = false;
-
+  // STUDENT MANAGEMENT CSV UPLOAD
   document.getElementById("uploadCsvBtn").onclick = function() {
     const fileInput = document.getElementById("csvFileInput");
     const section = document.getElementById("csvSectionSelect").value;
@@ -340,6 +337,7 @@
     reader.readAsText(fileInput.files[0]);
   };
 
+  // CHEATING PREVENTION
   async function triggerLock() {
     if (!examActive) return;
     document.getElementById("cheatOverlay").classList.remove("hidden");
@@ -365,6 +363,7 @@
     } else { alert("Incorrect Instructor Passcode."); }
   };
 
+  // STUDENT LOGIN & EXAM START
   document.getElementById("studentLoginBtn").onclick = async () => {
     const section = document.getElementById("sectionSelectStudent").value;
     const raw = document.getElementById("studentSelect").value;
@@ -374,13 +373,13 @@
     const data = JSON.parse(raw);
     activeStudent = { ...data, section };
 
-    // --- ENFORCED NO RETAKE CHECK ---
-    const resultsSnap = await get(child(ref(db), "results"));
+    // Retake Prevention
+    const checkPath = `results/${exam}/${section}`;
+    const resultsSnap = await get(child(ref(db), checkPath));
     if (resultsSnap.exists()) {
         const results = Object.values(resultsSnap.val());
-        const alreadySubmitted = results.some(r => r.id === data.id && r.exam === exam);
-        if (alreadySubmitted) {
-            alert("RETRIES NOT ALLOWED: Records show you have already submitted this exam.");
+        if (results.some(r => r.id === data.id)) {
+            alert("RETRIES NOT ALLOWED: You have already submitted this exam.");
             return;
         }
     }
@@ -427,7 +426,6 @@
       if (isSubmitting) return; 
       isSubmitting = true;
       document.getElementById("submitExamBtn").disabled = true;
-      document.getElementById("submitExamBtn").innerText = "Saving Final Score...";
 
       examActive = false; 
       clearInterval(examTimer);
@@ -440,12 +438,13 @@
 
       const examType = document.getElementById("studentExamSelect").value;
       const sectionKey = activeStudent.section || "Unknown";
+      
+      // Store in separated Course/Section path
       const resultsPath = `results/${examType}/${sectionKey}`;
 
       await push(ref(db, resultsPath), { 
         firstName: activeStudent.fName, lastName: activeStudent.lName, id: activeStudent.id, 
-        exam: examType,
-        section: activeStudent.section || null,
+        exam: examType, section: sectionKey,
         score, total: questions.length, 
         finishedAt: new Date().toLocaleTimeString(), serverTime: serverTimestamp() 
       });
@@ -461,6 +460,7 @@
     };
   }
 
+  // TIMER & NAVIGATION
   function startTimer(seconds) {
     let timeRemaining = seconds;
     examTimer = setInterval(() => {
@@ -472,106 +472,6 @@
     }, 1000);
   }
 
-  document.getElementById("instructorLoginBtn").onclick = async () => {
-    const enteredPass = document.getElementById("instructorPassword").value;
-    const snap = await get(child(ref(db), "adminConfig/instructorKey"));
-    if (snap.exists() && enteredPass === snap.val()) {
-      document.getElementById("loginContainer").classList.add("hidden");
-      document.getElementById("instructorPanel").classList.remove("hidden");
-      // Start with no subscription; instructor chooses course + section
-      subscribeResultsForSelection();
-      onValue(ref(db, "violations"), (s) => {
-          let h = ""; if(s.exists()) Object.values(s.val()).reverse().forEach(v => h+=`<p style="color:#e74c3c; background:rgba(255,255,255,0.1); padding:5px; border-radius:5px; margin-bottom:5px;">[${v.time}] ${v.student}</p>`);
-          document.getElementById("violationLogs").innerHTML = h;
-      });
-    } else { alert("Unauthorized!"); }
-  };
-
-  let resultsUnsub = null;
-
-  function subscribeResultsForSelection() {
-    const courseSelect = document.getElementById("resultFilterSelect");
-    const sectionSelect = document.getElementById("sectionResultFilter");
-    const course = courseSelect.value;
-    const section = sectionSelect.value;
-
-    // Update section dropdown options based on selected course.
-    // This ensures, for example, Engineering Thermodynamics only shows C, D, E.
-    const allowedSections = COURSE_SECTIONS[course] || ALL_SECTIONS.map(s => s.value);
-    sectionSelect.innerHTML = '<option value="ALL">-- Choose Section --</option>';
-    ALL_SECTIONS.forEach(s => {
-      if (allowedSections.includes(s.value)) {
-        const opt = document.createElement("option");
-        opt.value = s.value;
-        opt.textContent = s.label;
-        sectionSelect.appendChild(opt);
-      }
-    });
-
-    // If either not chosen, clear view and don't subscribe.
-    if (!course || course === "ALL" || !section || section === "ALL") {
-      if (resultsUnsub) {
-        resultsUnsub();
-        resultsUnsub = null;
-      }
-      resultsCache = [];
-      renderResults();
-      return;
-    }
-
-    // Clean previous subscription
-    if (resultsUnsub) {
-      resultsUnsub();
-      resultsUnsub = null;
-    }
-
-    const path = `results/${course}/${section}`;
-    const resultsRef = ref(db, path);
-
-    resultsUnsub = onValue(resultsRef, (snapshot) => {
-      const data = snapshot.exists() ? snapshot.val() : {};
-      resultsCache = Object.values(data).reverse();
-      renderResults();
-    });
-  }
-
-  function renderResults() {
-    const container = document.getElementById("studentResults");
-    let html = `<table><tr><th>Name</th><th>ID</th><th>Course</th><th>Section</th><th>Score</th><th>Time</th></tr>`;
-    if(resultsCache){
-        resultsCache.forEach(r => {
-          html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.exam || ''}</td><td>${r.section || ''}</td><td>${r.score}/${r.total}</td><td>${r.finishedAt || 'N/A'}</td></tr>`;
-        });
-    }
-    container.innerHTML = html + "</table>";
-  }
-
-  document.getElementById("resultFilterSelect").onchange = subscribeResultsForSelection;
-  document.getElementById("sectionResultFilter").onchange = subscribeResultsForSelection;
-
-  document.getElementById("downloadExcelBtn").onclick = function() {
-    if (!resultsCache || resultsCache.length === 0) return alert("No results to download.");
-    
-    const course = document.getElementById("resultFilterSelect").value;
-    const section = document.getElementById("sectionResultFilter").value;
-    let csvContent = "data:text/csv;charset=utf-8,First Name,Last Name,ID,Exam,Section,Score,Total,Finished Time\n";
-
-    resultsCache.forEach(r => {
-      const row = [r.firstName, r.lastName, r.id, r.exam, r.section || "", r.score, r.total, r.finishedAt];
-      csvContent += row.join(",") + "\n";
-    });
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    const safeCourse = (course && course !== "ALL") ? course.replace(/\s+/g, '_') : "ALL";
-    const safeSection = (section && section !== "ALL") ? section : "ALL";
-    link.setAttribute("download", `Exam_Results_${safeCourse}_${safeSection}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   function showQuestion(index) {
       document.querySelectorAll(".student-q-wrapper").forEach((q, i) => q.classList.toggle("hidden", i !== index));
       document.getElementById("prevBtn").disabled = (index === 0);
@@ -582,21 +482,70 @@
 
   document.getElementById("nextBtn").onclick = () => { if (currentQuestionIndex < totalQuestions - 1) showQuestion(++currentQuestionIndex); };
   document.getElementById("prevBtn").onclick = () => { if (currentQuestionIndex > 0) showQuestion(--currentQuestionIndex); };
-
   function shuffleArray(array) { for (let i = array.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [array[i], array[j]] = [array[j], array[i]]; } }
 
-  document.getElementById("sectionSelectStudent").onchange = async (e) => {
-    const snap = await get(child(ref(db), "studentList/" + e.target.value));
-    const sel = document.getElementById("studentSelect");
-    sel.innerHTML = '<option value="">-- Select Your Name --</option>';
-    if(snap.exists()) Object.values(snap.val()).forEach(s => {
-      const opt = document.createElement("option");
-      opt.value = JSON.stringify({id: s.id, fName: s.firstName, lName: s.lastName});
-      opt.textContent = `${s.firstName} ${s.lastName} (${s.id})`;
-      sel.appendChild(opt);
+  // INSTRUCTOR DASHBOARD LOGIC
+  document.getElementById("instructorLoginBtn").onclick = async () => {
+    const enteredPass = document.getElementById("instructorPassword").value;
+    const snap = await get(child(ref(db), "adminConfig/instructorKey"));
+    if (snap.exists() && enteredPass === snap.val()) {
+      document.getElementById("loginContainer").classList.add("hidden");
+      document.getElementById("instructorPanel").classList.remove("hidden");
+      onValue(ref(db, "violations"), (s) => {
+          let h = ""; if(s.exists()) Object.values(s.val()).reverse().forEach(v => h+=`<p style="color:#e74c3c; background:rgba(255,255,255,0.1); padding:5px; border-radius:5px; margin-bottom:5px;">[${v.time}] ${v.student}</p>`);
+          document.getElementById("violationLogs").innerHTML = h;
+      });
+    } else { alert("Unauthorized!"); }
+  };
+
+  // DISPLAY FILTERED RESULTS
+  let resultsUnsub = null;
+  document.getElementById("fetchResultsBtn").onclick = function() {
+    const course = document.getElementById("courseFilter").value;
+    const section = document.getElementById("sectionFilter").value;
+
+    if (!course || !section) return alert("Please select both a Course and a Section.");
+
+    if (resultsUnsub) resultsUnsub(); 
+
+    const path = `results/${course}/${section}`;
+    resultsUnsub = onValue(ref(db, path), (snapshot) => {
+      const container = document.getElementById("studentResults");
+      resultsCache = snapshot.exists() ? Object.values(snapshot.val()).reverse() : [];
+      
+      let html = `<h4>Viewing: ${course} (${section})</h4>`;
+      html += `<table><tr><th>Name</th><th>ID</th><th>Score</th><th>Total</th><th>Finished At</th></tr>`;
+      
+      if (resultsCache.length > 0) {
+        resultsCache.forEach(r => {
+          html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.score}</td><td>${r.total}</td><td>${r.finishedAt}</td></tr>`;
+        });
+      } else {
+        html += `<tr><td colspan="5" style="text-align:center;">No submissions found for this specific filter.</td></tr>`;
+      }
+      container.innerHTML = html + "</table>";
     });
   };
 
+  // DOWNLOAD CSV
+  document.getElementById("downloadExcelBtn").onclick = function() {
+    if (resultsCache.length === 0) return alert("No results to download.");
+    const course = document.getElementById("courseFilter").value;
+    const section = document.getElementById("sectionFilter").value;
+    
+    let csvContent = "data:text/csv;charset=utf-8,FirstName,LastName,ID,Score,Total,Time\n";
+    resultsCache.forEach(r => {
+      csvContent += `${r.firstName},${r.lastName},${r.id},${r.score},${r.total},${r.finishedAt}\n`;
+    });
+    const link = document.createElement("a");
+    link.setAttribute("href", encodeURI(csvContent));
+    link.setAttribute("download", `Results_${course}_${section}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // EXAM QUESTIONS MANAGEMENT
   document.getElementById("examSelect").onchange = async (e) => {
     const container = document.getElementById("questionsContainer");
     if (!e.target.value) { container.innerHTML = ""; return; }
@@ -629,8 +578,20 @@
     alert("Saved!");
   };
 
+  // STUDENT NAMES AUTO-LOAD
+  document.getElementById("sectionSelectStudent").onchange = async (e) => {
+    const snap = await get(child(ref(db), "studentList/" + e.target.value));
+    const sel = document.getElementById("studentSelect");
+    sel.innerHTML = '<option value="">-- Select Your Name --</option>';
+    if(snap.exists()) Object.values(snap.val()).forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = JSON.stringify({id: s.id, fName: s.firstName, lName: s.lastName});
+      opt.textContent = `${s.firstName} ${s.lastName} (${s.id})`;
+      sel.appendChild(opt);
+    });
+  };
+
   document.getElementById("logoutInstructor").onclick = () => location.reload();
 </script>
 </body>
 </html>
-
