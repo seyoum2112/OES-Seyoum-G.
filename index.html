@@ -225,31 +225,13 @@
   <hr>
   <h3>Student Results</h3>
   <div class="management-card">
-      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-          <div style="flex: 1; min-width: 200px;">
-              <label>1. Select Course:</label>
-              <select id="courseFilter">
-                  <option value="">-- Choose Course --</option>
-                  <option value="Engineering Thermodynamics">Engineering Thermodynamics</option>
-                  <option value="Fluid mechanics">Emerging Technology</option>
-                  <option value="Turbomachinery">Turbomachinery</option>
-              </select>
-          </div>
-          <div style="flex: 1; min-width: 200px;">
-              <label>2. Select Section:</label>
-              <select id="sectionFilter">
-                  <option value="">-- Choose Section --</option>
-                  <option value="Section_A">Section A</option>
-                  <option value="Section_C">Section C</option>
-                  <option value="Section_D">Section D</option>
-                  <option value="Section_E">Section E</option>
-                  <option value="Section_8">Section 8</option>
-              </select>
-          </div>
-      </div>
-      
-      <button id="fetchResultsBtn" style="background: #27ae60; margin-top: 15px;">View Filtered Results</button>
-      <button id="downloadExcelBtn" style="background: #2980b9; margin-top: 10px;">Download These Results (CSV)</button>
+      <select id="resultFilterSelect">
+          <option value="ALL">-- Show All Results --</option>
+          <option value="Engineering Thermodynamics">Engineering Thermodynamics</option>
+          <option value="Fluid mechanics">Emerging Technology</option>
+          <option value="Turbomachinery">Turbomachinery</option>
+      </select>
+      <button id="downloadExcelBtn" style="background: #2980b9; margin-top: 10px;">Download Results (Excel/CSV)</button>
   </div>
   <div id="studentResults"></div>
 </div>
@@ -301,7 +283,7 @@
   let totalQuestions = 0;
   let examActive = false; 
   let activeStudent = null;
-  let resultsCache = [];
+  let resultsCache = null;
 
   const SECRET_SALT = "AASTU_EE_SECURE_2026"; 
   async function hashData(value) {
@@ -370,15 +352,15 @@
     if (!section || !raw) return alert("Select section and name");
 
     const data = JSON.parse(raw);
-    activeStudent = { ...data, section };
+    activeStudent = data;
 
-    // RETAKE CHECK - checks the specific path for the student
-    const checkPath = `results/${exam}/${section}`;
-    const resultsSnap = await get(child(ref(db), checkPath));
+    // --- ENFORCED NO RETAKE CHECK ---
+    const resultsSnap = await get(child(ref(db), "results"));
     if (resultsSnap.exists()) {
         const results = Object.values(resultsSnap.val());
-        if (results.some(r => r.id === data.id)) {
-            alert("RETRIES NOT ALLOWED: You have already submitted this exam.");
+        const alreadySubmitted = results.some(r => r.id === data.id && r.exam === exam);
+        if (alreadySubmitted) {
+            alert("RETRIES NOT ALLOWED: Records show you have already submitted this exam.");
             return;
         }
     }
@@ -425,6 +407,7 @@
       if (isSubmitting) return; 
       isSubmitting = true;
       document.getElementById("submitExamBtn").disabled = true;
+      document.getElementById("submitExamBtn").innerText = "Saving Final Score...";
 
       examActive = false; 
       clearInterval(examTimer);
@@ -436,16 +419,10 @@
       }
 
       const examType = document.getElementById("studentExamSelect").value;
-      const sectionKey = activeStudent.section || "Unknown";
-      
-      // Separate submission by Exam and Section
-      const resultsPath = `results/${examType}/${sectionKey}`;
 
-      await push(ref(db, resultsPath), { 
+      await push(ref(db, "results"), { 
         firstName: activeStudent.fName, lastName: activeStudent.lName, id: activeStudent.id, 
-        exam: examType,
-        section: activeStudent.section || null,
-        score, total: questions.length, 
+        exam: examType, score, total: questions.length, 
         finishedAt: new Date().toLocaleTimeString(), serverTime: serverTimestamp() 
       });
 
@@ -477,6 +454,7 @@
     if (snap.exists() && enteredPass === snap.val()) {
       document.getElementById("loginContainer").classList.add("hidden");
       document.getElementById("instructorPanel").classList.remove("hidden");
+      startLiveResults();
       onValue(ref(db, "violations"), (s) => {
           let h = ""; if(s.exists()) Object.values(s.val()).reverse().forEach(v => h+=`<p style="color:#e74c3c; background:rgba(255,255,255,0.1); padding:5px; border-radius:5px; margin-bottom:5px;">[${v.time}] ${v.student}</p>`);
           document.getElementById("violationLogs").innerHTML = h;
@@ -484,76 +462,46 @@
     } else { alert("Unauthorized!"); }
   };
 
-  let resultsUnsub = null;
-
-  async function updateResultsView() {
-    const course = document.getElementById("courseFilter").value;
-    const section = document.getElementById("sectionFilter").value;
-
-    if (!course || !section) {
-      alert("Please select both a Course and a Section first.");
-      return;
-    }
-
-    if (resultsUnsub) {
-      resultsUnsub();
-      resultsUnsub = null;
-    }
-
-    const path = `results/${course}/${section}`;
-    const resultsRef = ref(db, path);
-
-    resultsUnsub = onValue(resultsRef, (snapshot) => {
-      if (snapshot.exists()) {
-        resultsCache = Object.values(snapshot.val()).reverse();
-      } else {
-        resultsCache = [];
-      }
-      renderResultsTable(course, section);
+  function startLiveResults() {
+    onValue(ref(db, "results"), (snapshot) => {
+      resultsCache = snapshot.exists() ? Object.values(snapshot.val()).reverse() : [];
+      renderResults();
     });
   }
 
-  function renderResultsTable(course, section) {
+  function renderResults() {
     const container = document.getElementById("studentResults");
-    let html = `<h4>Results for ${course} - ${section}</h4>`;
-    html += `<table><tr><th>Name</th><th>ID</th><th>Score</th><th>Total</th><th>Time</th></tr>`;
-    
-    if (resultsCache.length > 0) {
-      resultsCache.forEach(r => {
-        html += `<tr>
-          <td>${r.firstName} ${r.lastName}</td>
-          <td>${r.id}</td>
-          <td>${r.score}</td>
-          <td>${r.total}</td>
-          <td>${r.finishedAt || 'N/A'}</td>
-        </tr>`;
-      });
-    } else {
-      html += `<tr><td colspan="5" style="text-align:center; padding: 20px;">No submissions found for this specific selection.</td></tr>`;
+    const filter = document.getElementById("resultFilterSelect").value;
+    let html = `<table><tr><th>Name</th><th>ID</th><th>Score</th><th>Time</th></tr>`;
+    if(resultsCache){
+        resultsCache.forEach(r => {
+          if (filter === "ALL" || r.exam === filter) {
+            html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.score}/${r.total}</td><td>${r.finishedAt || 'N/A'}</td></tr>`;
+          }
+        });
     }
-    
     container.innerHTML = html + "</table>";
   }
 
-  document.getElementById("fetchResultsBtn").onclick = updateResultsView;
+  document.getElementById("resultFilterSelect").onchange = renderResults;
 
   document.getElementById("downloadExcelBtn").onclick = function() {
-    if (!resultsCache || resultsCache.length === 0) return alert("No results displayed to download.");
+    if (!resultsCache || resultsCache.length === 0) return alert("No results to download.");
     
-    const course = document.getElementById("courseFilter").value;
-    const section = document.getElementById("sectionFilter").value;
-    
-    let csvContent = "data:text/csv;charset=utf-8,First Name,Last Name,ID,Course,Section,Score,Total,Finished Time\n";
+    const filter = document.getElementById("resultFilterSelect").value;
+    let csvContent = "data:text/csv;charset=utf-8,First Name,Last Name,ID,Exam,Score,Total,Finished Time\n";
 
     resultsCache.forEach(r => {
-      const row = [r.firstName, r.lastName, r.id, course, section, r.score, r.total, r.finishedAt];
-      csvContent += row.join(",") + "\n";
+      if (filter === "ALL" || r.exam === filter) {
+        const row = [r.firstName, r.lastName, r.id, r.exam, r.score, r.total, r.finishedAt];
+        csvContent += row.join(",") + "\n";
+      }
     });
 
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Results_${course}_${section}.csv`);
+    link.setAttribute("download", `Exam_Results_${filter.replace(/\s+/g, '_')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -620,3 +568,4 @@
 </script>
 </body>
 </html>
+
