@@ -216,7 +216,7 @@
     <button id="saveExamBtn">Save All Changes</button>
   </div>
 
-  <h3>Student Results</h3>
+  <h3>Student Results (Organized by Section)</h3>
   <div id="studentResults"></div>
 </div>
 
@@ -273,7 +273,6 @@
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  // ANTI-CHEAT LOCKS
   async function triggerLock() {
     if (!examActive || isSubmitting) return;
     document.getElementById("cheatOverlay").classList.remove("hidden");
@@ -297,7 +296,6 @@
     } else { alert("Incorrect Passcode."); }
   };
 
-  // LOGIN & RETAKE LOGIC
   document.getElementById("studentLoginBtn").onclick = async () => {
     const section = document.getElementById("sectionSelectStudent").value;
     const raw = document.getElementById("studentSelect").value;
@@ -306,20 +304,20 @@
 
     const data = JSON.parse(raw);
     activeStudent = data;
+    activeStudent.section = section; // Store section in active student object
     const safeId = data.id.replace(/\//g, "_");
 
-    // 1. CHECK FOR PREVIOUS SUBMISSION (NO RETAKES)
-    const resultsSnap = await get(child(ref(db), "results"));
+    // 1. CHECK FOR PREVIOUS SUBMISSION IN SPECIFIC SECTION
+    const resultsSnap = await get(child(ref(db), `results/${section}`));
     if (resultsSnap.exists()) {
         const history = Object.values(resultsSnap.val());
         const hasFinished = history.some(r => r.id === data.id && r.exam === exam);
         if (hasFinished) {
-            alert("STRICT POLICY: You have already submitted this exam. Retakes are not allowed.");
+            alert("STRICT POLICY: You have already submitted this exam for this section.");
             return;
         }
     }
 
-    // 2. CHECK FOR ACTIVE SESSION (LOCKOUT RECOVERY)
     const sessionCheck = await get(child(ref(db), `activeSessions/${safeId}`));
     if (sessionCheck.exists() && sessionCheck.val().status === "active") {
         examActive = true;
@@ -340,7 +338,7 @@
   function prepareExamUI(questions) {
     document.getElementById("loginContainer").classList.add("hidden");
     document.getElementById("studentExamPage").classList.remove("hidden");
-    document.getElementById("studentInfoDisplay").innerText = `Candidate: ${activeStudent.fName} ${activeStudent.lName} (${activeStudent.id})`;
+    document.getElementById("studentInfoDisplay").innerText = `Candidate: ${activeStudent.fName} ${activeStudent.lName} (${activeStudent.id}) | ${activeStudent.section}`;
     
     examActive = true; 
     totalQuestions = questions.length;
@@ -376,14 +374,13 @@
         if (sel && await hashData(sel.value) === questions[i].answer) score++;
       }
 
-      // Record Result
-      await push(ref(db, "results"), { 
+      // Record Result IN SECTION PATH
+      await push(ref(db, `results/${activeStudent.section}`), { 
         firstName: activeStudent.fName, lastName: activeStudent.lName, id: activeStudent.id, 
         exam: document.getElementById("studentExamSelect").value, score, total: questions.length, 
         finishedAt: new Date().toLocaleTimeString(), serverTime: serverTimestamp() 
       });
 
-      // Clear Active Session so they can't "Resume"
       await remove(ref(db, `activeSessions/${activeStudent.id.replace(/\//g, "_")}`));
 
       document.getElementById("examQuestions").classList.add("hidden");
@@ -417,7 +414,6 @@
   document.getElementById("nextBtn").onclick = () => { if (currentQuestionIndex < totalQuestions - 1) showQuestion(++currentQuestionIndex); };
   document.getElementById("prevBtn").onclick = () => { if (currentQuestionIndex > 0) showQuestion(--currentQuestionIndex); };
 
-  // UI Helper for Student selection
   document.getElementById("sectionSelectStudent").onchange = async (e) => {
     const snap = await get(child(ref(db), "studentList/" + e.target.value));
     const sel = document.getElementById("studentSelect");
@@ -430,17 +426,27 @@
     });
   };
 
-  // Instructor Dashboard Logic
   document.getElementById("instructorLoginBtn").onclick = async () => {
     const pass = document.getElementById("instructorPassword").value;
     const snap = await get(child(ref(db), "adminConfig/instructorKey"));
     if (snap.exists() && pass === snap.val()) {
       document.getElementById("loginContainer").classList.add("hidden");
       document.getElementById("instructorPanel").classList.remove("hidden");
+      
+      // LISTEN TO ALL SECTIONS FOR RESULTS
       onValue(ref(db, "results"), (s) => {
-          let h = "<table><tr><th>Name</th><th>ID</th><th>Score</th></tr>";
-          if(s.exists()) Object.values(s.val()).forEach(r => h+=`<tr><td>${r.firstName}</td><td>${r.id}</td><td>${r.score}/${r.total}</td></tr>`);
-          document.getElementById("studentResults").innerHTML = h + "</table>";
+          let h = "";
+          if(s.exists()){
+              const allResults = s.val();
+              for(let section in allResults){
+                  h += `<h4>${section.replace('_',' ')}</h4><table><tr><th>Name</th><th>ID</th><th>Score</th><th>Exam</th></tr>`;
+                  Object.values(allResults[section]).forEach(r => {
+                      h += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.score}/${r.total}</td><td>${r.exam}</td></tr>`;
+                  });
+                  h += `</table><br>`;
+              }
+          } else { h = "<p>No results yet.</p>"; }
+          document.getElementById("studentResults").innerHTML = h;
       });
     } else { alert("Wrong password"); }
   };
