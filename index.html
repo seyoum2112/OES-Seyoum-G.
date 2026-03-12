@@ -284,6 +284,7 @@
   let examActive = false; 
   let activeStudent = null;
   let resultsCache = null;
+  let isSubmitting = false;
 
   const SECRET_SALT = "AASTU_EE_SECURE_2026"; 
   async function hashData(value) {
@@ -291,8 +292,6 @@
     const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
-
-  let isSubmitting = false;
 
   document.getElementById("uploadCsvBtn").onclick = function() {
     const fileInput = document.getElementById("csvFileInput");
@@ -326,7 +325,7 @@
     push(ref(db, "violations"), {
         student: activeStudent.fName + " " + activeStudent.lName,
         id: activeStudent.id,
-        time: new Date().toLocaleTimeString(),
+        time: new Date().toLocaleString(), // Updated to include Date
         type: "Tab Switch / Refresh / Window Blur"
     });
   }
@@ -354,13 +353,12 @@
     const data = JSON.parse(raw);
     activeStudent = data;
 
-    // --- ENFORCED NO RETAKE CHECK ---
     const resultsSnap = await get(child(ref(db), "results"));
     if (resultsSnap.exists()) {
         const results = Object.values(resultsSnap.val());
-        const alreadySubmitted = results.some(r => r.id === data.id && r.exam === exam);
-        if (alreadySubmitted) {
-            alert("RETRIES NOT ALLOWED: Records show you have already submitted this exam.");
+        const alreadyDone = results.some(r => r.id === data.id && r.exam === exam);
+        if (alreadyDone) {
+            alert("ACCESS DENIED: Records show you have already submitted this exam.");
             return;
         }
     }
@@ -407,7 +405,7 @@
       if (isSubmitting) return; 
       isSubmitting = true;
       document.getElementById("submitExamBtn").disabled = true;
-      document.getElementById("submitExamBtn").innerText = "Saving Final Score...";
+      document.getElementById("submitExamBtn").innerText = "Saving Score...";
 
       examActive = false; 
       clearInterval(examTimer);
@@ -421,9 +419,14 @@
       const examType = document.getElementById("studentExamSelect").value;
 
       await push(ref(db, "results"), { 
-        firstName: activeStudent.fName, lastName: activeStudent.lName, id: activeStudent.id, 
-        exam: examType, score, total: questions.length, 
-        finishedAt: new Date().toLocaleTimeString(), serverTime: serverTimestamp() 
+        firstName: activeStudent.fName, 
+        lastName: activeStudent.lName, 
+        id: activeStudent.id, 
+        exam: examType, 
+        score: score, 
+        total: questions.length, 
+        finishedAt: new Date().toLocaleString(), // CAPTURES DATE AND TIME
+        serverTime: serverTimestamp() 
       });
 
       await remove(ref(db, `activeSessions/${activeStudent.id.replace(/\//g, "_")}`));
@@ -472,7 +475,7 @@
   function renderResults() {
     const container = document.getElementById("studentResults");
     const filter = document.getElementById("resultFilterSelect").value;
-    let html = `<table><tr><th>Name</th><th>ID</th><th>Score</th><th>Time</th></tr>`;
+    let html = `<table><tr><th>Name</th><th>ID</th><th>Score</th><th>Date & Time</th></tr>`;
     if(resultsCache){
         resultsCache.forEach(r => {
           if (filter === "ALL" || r.exam === filter) {
@@ -487,17 +490,14 @@
 
   document.getElementById("downloadExcelBtn").onclick = function() {
     if (!resultsCache || resultsCache.length === 0) return alert("No results to download.");
-    
     const filter = document.getElementById("resultFilterSelect").value;
-    let csvContent = "data:text/csv;charset=utf-8,First Name,Last Name,ID,Exam,Score,Total,Finished Time\n";
-
+    let csvContent = "data:text/csv;charset=utf-8,First Name,Last Name,ID,Exam,Score,Total,Date and Time\n";
     resultsCache.forEach(r => {
       if (filter === "ALL" || r.exam === filter) {
-        const row = [r.firstName, r.lastName, r.id, r.exam, r.score, r.total, r.finishedAt];
+        const row = [r.firstName, r.lastName, r.id, r.exam, r.score, r.total, `"${r.finishedAt}"`];
         csvContent += row.join(",") + "\n";
       }
     });
-
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
