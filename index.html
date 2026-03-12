@@ -215,7 +215,7 @@
   <hr>
   <h3>Student Results (Separated by Section)</h3>
   <div class="management-card">
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+      <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">
           <div>
             <label>View Results For:</label>
             <select id="resultSectionFilterSelect">
@@ -280,7 +280,7 @@
   let examActive = false; 
   let activeStudent = null;
   let studentSection = ""; 
-  let resultsCache = null;
+  let resultsCache = [];
 
   const SECRET_SALT = "AASTU_THERMO_2026"; 
   async function hashData(value) {
@@ -289,43 +289,91 @@
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  // Section-based Results Rendering
+  // --- IMPROVED RENDER FUNCTION ---
   function renderResults() {
     const container = document.getElementById("studentResults");
     const sectionFilter = document.getElementById("resultSectionFilterSelect").value;
     
+    if (!resultsCache || resultsCache.length === 0) {
+        container.innerHTML = "<p style='color:black; text-align:center; padding:10px;'>No results found in database.</p>";
+        return;
+    }
+
     let html = `<table><tr><th>Section</th><th>Name</th><th>ID</th><th>Score</th><th>Submitted</th></tr>`;
-    if(resultsCache){
-        resultsCache.forEach(r => {
-          if (sectionFilter === "ALL" || r.section === sectionFilter) {
-            html += `<tr>
-                <td style="font-weight:bold; color:#510762;">${r.section}</td>
-                <td>${r.firstName} ${r.lastName}</td>
-                <td>${r.id}</td>
-                <td>${r.score}/${r.total}</td>
-                <td>${r.finishedAt || 'N/A'}</td>
-            </tr>`;
-          }
+    let count = 0;
+
+    resultsCache.forEach(r => {
+      if (sectionFilter === "ALL" || r.section === sectionFilter) {
+        count++;
+        html += `<tr>
+            <td style="font-weight:bold; color:#510762;">${r.section || 'N/A'}</td>
+            <td>${r.firstName} ${r.lastName}</td>
+            <td>${r.id}</td>
+            <td>${r.score}/${r.total}</td>
+            <td>${r.finishedAt || 'N/A'}</td>
+        </tr>`;
+      }
+    });
+
+    if (count === 0) {
+        container.innerHTML = `<p style='color:black; text-align:center; padding:10px;'>No results for ${sectionFilter}.</p>`;
+    } else {
+        container.innerHTML = html + "</table>";
+    }
+  }
+
+  // --- INSTRUCTOR LOGIN ---
+  document.getElementById("instructorLoginBtn").onclick = async () => {
+    const enteredPass = document.getElementById("instructorPassword").value;
+    // Hardcoded simple admin check for now, can be replaced with Firebase check
+    if (enteredPass === "admin") {
+      document.getElementById("loginContainer").classList.add("hidden");
+      document.getElementById("instructorPanel").classList.remove("hidden");
+      
+      // Fetch and Listen to Results Live
+      const resultsRef = ref(db, "results");
+      onValue(resultsRef, (snapshot) => {
+        if (snapshot.exists()) {
+            resultsCache = Object.values(snapshot.val()).reverse();
+        } else {
+            resultsCache = [];
+        }
+        renderResults();
+      });
+    } else {
+      alert("Unauthorized access.");
+    }
+  };
+
+  // Update table when dropdown changes
+  document.getElementById("resultSectionFilterSelect").onchange = renderResults;
+
+  // --- STUDENT LOGIN & EXAM LOGIC ---
+  document.getElementById("sectionSelectStudent").onchange = async (e) => {
+    const section = e.target.value;
+    if(!section) return;
+    const snap = await get(child(ref(db), "studentList/" + section));
+    const sel = document.getElementById("studentSelect");
+    sel.innerHTML = '<option value="">-- Select Your Name --</option>';
+    if(snap.exists()) {
+        Object.values(snap.val()).forEach(s => {
+          const opt = document.createElement("option");
+          opt.value = JSON.stringify({id: s.id, fName: s.firstName, lName: s.lastName});
+          opt.textContent = `${s.firstName} ${s.lastName} (${s.id})`;
+          sel.appendChild(opt);
         });
     }
-    container.innerHTML = html + "</table>";
-  }
+  };
 
   document.getElementById("studentLoginBtn").onclick = async () => {
     const section = document.getElementById("sectionSelectStudent").value;
     const raw = document.getElementById("studentSelect").value;
     const exam = "Engineering Thermodynamics";
 
-    if (!section || !raw) return alert("Please select your section and name.");
+    if (!section || !raw) return alert("Select section and name.");
     
-    const data = JSON.parse(raw);
-    activeStudent = data;
+    activeStudent = JSON.parse(raw);
     studentSection = section; 
-
-    // Verification and Password
-    const passSnap = await get(child(ref(db), `examConfig/${section}`));
-    const userInput = prompt(`Enter Access Password for ${section}:`);
-    if (userInput !== (passSnap.exists() ? passSnap.val().toString() : "1234")) return alert("Incorrect Password!");
 
     const examSnap = await get(child(ref(db), "exams/" + exam));
     if (!examSnap.exists()) return alert("Exam questions not found.");
@@ -358,7 +406,6 @@
         if (sel && await hashData(sel.value) === questions[i].answer) score++;
       }
 
-      // SUBMIT WITH SECTION SEPARATION
       await push(ref(db, "results"), { 
         firstName: activeStudent.fName, 
         lastName: activeStudent.lName, 
@@ -375,36 +422,13 @@
     };
   }
 
-  // Shared Logic
-  document.getElementById("sectionSelectStudent").onchange = async (e) => {
-    const snap = await get(child(ref(db), "studentList/" + e.target.value));
-    const sel = document.getElementById("studentSelect");
-    sel.innerHTML = '<option value="">-- Select Your Name --</option>';
-    if(snap.exists()) Object.values(snap.val()).forEach(s => {
-      const opt = document.createElement("option");
-      opt.value = JSON.stringify({id: s.id, fName: s.firstName, lName: s.lastName});
-      opt.textContent = `${s.firstName} ${s.lastName} (${s.id})`;
-      sel.appendChild(opt);
-    });
-  };
-
-  document.getElementById("instructorLoginBtn").onclick = async () => {
-    if (document.getElementById("instructorPassword").value === "admin") {
-      document.getElementById("loginContainer").classList.add("hidden");
-      document.getElementById("instructorPanel").classList.remove("hidden");
-      onValue(ref(db, "results"), (snapshot) => {
-        resultsCache = snapshot.exists() ? Object.values(snapshot.val()).reverse() : [];
-        renderResults();
-      });
-    }
-  };
-
-  document.getElementById("resultSectionFilterSelect").onchange = renderResults;
+  // --- HELPERS ---
   function startTimer(s) { examTimer = setInterval(() => { document.getElementById("timerDisplay").innerText = `Time: ${Math.floor(s/60)}:${(s%60).toString().padStart(2, '0')}`; if (s-- <= 0) document.getElementById("submitExamBtn").click(); }, 1000); }
   function showQuestion(index) { document.querySelectorAll(".student-q-wrapper").forEach((q, i) => q.classList.toggle("hidden", i !== index)); document.getElementById("prevBtn").disabled = (index === 0); document.getElementById("nextBtn").classList.toggle("hidden", index === totalQuestions - 1); document.getElementById("submitExamBtn").classList.toggle("hidden", index !== totalQuestions - 1); }
   document.getElementById("nextBtn").onclick = () => showQuestion(++currentQuestionIndex);
   document.getElementById("prevBtn").onclick = () => showQuestion(--currentQuestionIndex);
   function shuffleArray(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } }
+  document.getElementById("logoutInstructor").onclick = () => location.reload();
 </script>
 </body>
 </html>
