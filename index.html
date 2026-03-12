@@ -292,6 +292,7 @@
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
+  // Prevents multiple submissions
   let isSubmitting = false;
 
   document.getElementById("uploadCsvBtn").onclick = function() {
@@ -353,19 +354,8 @@
 
     const data = JSON.parse(raw);
     activeStudent = data;
-
-    // --- ENFORCED NO RETAKE CHECK ---
-    const resultsSnap = await get(child(ref(db), "results"));
-    if (resultsSnap.exists()) {
-        const results = Object.values(resultsSnap.val());
-        const alreadySubmitted = results.some(r => r.id === data.id && r.exam === exam);
-        if (alreadySubmitted) {
-            alert("RETRIES NOT ALLOWED: Records show you have already submitted this exam.");
-            return;
-        }
-    }
-
     const sessionPath = `activeSessions/${data.id.replace(/\//g, "_")}`;
+
     const sessionCheck = await get(child(ref(db), sessionPath));
     if (sessionCheck.exists() && sessionCheck.val().status === "active") {
         examActive = true; 
@@ -374,6 +364,12 @@
         const examSnap = await get(child(ref(db), "exams/" + sessionCheck.val().exam));
         if(examSnap.exists()) prepareExamUI(examSnap.val());
         return; 
+    }
+
+    const resultsSnap = await get(child(ref(db), "results"));
+    if (resultsSnap.exists()) {
+        const alreadySubmitted = Object.values(resultsSnap.val()).some(r => r.id === data.id && r.exam === exam);
+        if (alreadySubmitted) return alert("Retakes not allowed.");
     }
 
     const passSnap = await get(child(ref(db), `examConfig/${section}`));
@@ -404,10 +400,10 @@
     startTimer(600); 
 
     document.getElementById("submitExamBtn").onclick = async () => {
-      if (isSubmitting) return; 
+      if (isSubmitting) return; // Prevent double submit
       isSubmitting = true;
       document.getElementById("submitExamBtn").disabled = true;
-      document.getElementById("submitExamBtn").innerText = "Saving Final Score...";
+      document.getElementById("submitExamBtn").innerText = "Submitting...";
 
       examActive = false; 
       clearInterval(examTimer);
@@ -418,11 +414,9 @@
         if (sel && await hashData(sel.value) === questions[i].answer) score++;
       }
 
-      const examType = document.getElementById("studentExamSelect").value;
-
       await push(ref(db, "results"), { 
         firstName: activeStudent.fName, lastName: activeStudent.lName, id: activeStudent.id, 
-        exam: examType, score, total: questions.length, 
+        exam: document.getElementById("studentExamSelect").value, score, total: questions.length, 
         finishedAt: new Date().toLocaleTimeString(), serverTime: serverTimestamp() 
       });
 
@@ -568,4 +562,3 @@
 </script>
 </body>
 </html>
-
