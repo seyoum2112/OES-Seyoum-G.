@@ -225,11 +225,10 @@
   <hr>
   <h3>Student Results</h3>
   <div class="management-card">
-      <select id="resultFilterSelect">
-          <option value="ALL">-- Show All Results --</option>
-          <option value="Engineering Thermodynamics">Engineering Thermodynamics</option>
-          <option value="Fluid mechanics">Emerging Technology</option>
-          <option value="Turbomachinery">Turbomachinery</option>
+      <label>Select Course &amp; Section:</label>
+      <select id="resultGroupSelect">
+          <option value="">-- Choose Course &amp; Section --</option>
+          <!-- Options are filled by script so that each entry is course+section -->
       </select>
       <button id="downloadExcelBtn" style="background: #2980b9; margin-top: 10px;">Download Results (Excel/CSV)</button>
   </div>
@@ -284,6 +283,27 @@
   let examActive = false; 
   let activeStudent = null;
   let resultsCache = null;
+
+  // Map each course to the sections that actually take it.
+  const COURSE_SECTIONS = {
+    "Engineering Thermodynamics": ["Section_C", "Section_D", "Section_E"],
+    "Fluid mechanics": ["Section_A", "Section_8", "Section_C", "Section_D", "Section_E"],
+    "Turbomachinery": ["Section_A", "Section_8", "Section_C", "Section_D", "Section_E"]
+  };
+
+  const SECTION_LABELS = {
+    "Section_A": "Section A",
+    "Section_C": "Section C",
+    "Section_D": "Section D",
+    "Section_E": "Section E",
+    "Section_8": "Section 8"
+  };
+
+  const COURSE_LABELS = {
+    "Engineering Thermodynamics": "Engineering Thermodynamics",
+    "Fluid mechanics": "Emerging Technology",
+    "Turbomachinery": "Turbomachinery"
+  };
 
   const SECRET_SALT = "AASTU_EE_SECURE_2026"; 
   async function hashData(value) {
@@ -352,7 +372,7 @@
     if (!section || !raw) return alert("Select section and name");
 
     const data = JSON.parse(raw);
-    activeStudent = data;
+    activeStudent = { ...data, section };
 
     // --- ENFORCED NO RETAKE CHECK ---
     const resultsSnap = await get(child(ref(db), "results"));
@@ -419,10 +439,14 @@
       }
 
       const examType = document.getElementById("studentExamSelect").value;
+      const sectionKey = activeStudent.section || "Unknown";
+      const resultsPath = `results/${examType}/${sectionKey}`;
 
-      await push(ref(db, "results"), { 
+      await push(ref(db, resultsPath), { 
         firstName: activeStudent.fName, lastName: activeStudent.lName, id: activeStudent.id, 
-        exam: examType, score, total: questions.length, 
+        exam: examType,
+        section: activeStudent.section || null,
+        score, total: questions.length, 
         finishedAt: new Date().toLocaleTimeString(), serverTime: serverTimestamp() 
       });
 
@@ -454,7 +478,8 @@
     if (snap.exists() && enteredPass === snap.val()) {
       document.getElementById("loginContainer").classList.add("hidden");
       document.getElementById("instructorPanel").classList.remove("hidden");
-      startLiveResults();
+      // Start with no subscription; instructor chooses course + section
+      subscribeResultsForSelection();
       onValue(ref(db, "violations"), (s) => {
           let h = ""; if(s.exists()) Object.values(s.val()).reverse().forEach(v => h+=`<p style="color:#e74c3c; background:rgba(255,255,255,0.1); padding:5px; border-radius:5px; margin-bottom:5px;">[${v.time}] ${v.student}</p>`);
           document.getElementById("violationLogs").innerHTML = h;
@@ -462,46 +487,86 @@
     } else { alert("Unauthorized!"); }
   };
 
-  function startLiveResults() {
-    onValue(ref(db, "results"), (snapshot) => {
-      resultsCache = snapshot.exists() ? Object.values(snapshot.val()).reverse() : [];
+  let resultsUnsub = null;
+
+  function subscribeResultsForSelection() {
+    const courseSelect = document.getElementById("resultFilterSelect");
+    const sectionSelect = document.getElementById("sectionResultFilter");
+    const course = courseSelect.value;
+    const section = sectionSelect.value;
+
+    // Update section dropdown options based on selected course.
+    // This ensures, for example, Engineering Thermodynamics only shows C, D, E.
+    const allowedSections = COURSE_SECTIONS[course] || ALL_SECTIONS.map(s => s.value);
+    sectionSelect.innerHTML = '<option value="ALL">-- Choose Section --</option>';
+    ALL_SECTIONS.forEach(s => {
+      if (allowedSections.includes(s.value)) {
+        const opt = document.createElement("option");
+        opt.value = s.value;
+        opt.textContent = s.label;
+        sectionSelect.appendChild(opt);
+      }
+    });
+
+    // If either not chosen, clear view and don't subscribe.
+    if (!course || course === "ALL" || !section || section === "ALL") {
+      if (resultsUnsub) {
+        resultsUnsub();
+        resultsUnsub = null;
+      }
+      resultsCache = [];
+      renderResults();
+      return;
+    }
+
+    // Clean previous subscription
+    if (resultsUnsub) {
+      resultsUnsub();
+      resultsUnsub = null;
+    }
+
+    const path = `results/${course}/${section}`;
+    const resultsRef = ref(db, path);
+
+    resultsUnsub = onValue(resultsRef, (snapshot) => {
+      const data = snapshot.exists() ? snapshot.val() : {};
+      resultsCache = Object.values(data).reverse();
       renderResults();
     });
   }
 
   function renderResults() {
     const container = document.getElementById("studentResults");
-    const filter = document.getElementById("resultFilterSelect").value;
-    let html = `<table><tr><th>Name</th><th>ID</th><th>Score</th><th>Time</th></tr>`;
+    let html = `<table><tr><th>Name</th><th>ID</th><th>Course</th><th>Section</th><th>Score</th><th>Time</th></tr>`;
     if(resultsCache){
         resultsCache.forEach(r => {
-          if (filter === "ALL" || r.exam === filter) {
-            html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.score}/${r.total}</td><td>${r.finishedAt || 'N/A'}</td></tr>`;
-          }
+          html += `<tr><td>${r.firstName} ${r.lastName}</td><td>${r.id}</td><td>${r.exam || ''}</td><td>${r.section || ''}</td><td>${r.score}/${r.total}</td><td>${r.finishedAt || 'N/A'}</td></tr>`;
         });
     }
     container.innerHTML = html + "</table>";
   }
 
-  document.getElementById("resultFilterSelect").onchange = renderResults;
+  document.getElementById("resultFilterSelect").onchange = subscribeResultsForSelection;
+  document.getElementById("sectionResultFilter").onchange = subscribeResultsForSelection;
 
   document.getElementById("downloadExcelBtn").onclick = function() {
     if (!resultsCache || resultsCache.length === 0) return alert("No results to download.");
     
-    const filter = document.getElementById("resultFilterSelect").value;
-    let csvContent = "data:text/csv;charset=utf-8,First Name,Last Name,ID,Exam,Score,Total,Finished Time\n";
+    const course = document.getElementById("resultFilterSelect").value;
+    const section = document.getElementById("sectionResultFilter").value;
+    let csvContent = "data:text/csv;charset=utf-8,First Name,Last Name,ID,Exam,Section,Score,Total,Finished Time\n";
 
     resultsCache.forEach(r => {
-      if (filter === "ALL" || r.exam === filter) {
-        const row = [r.firstName, r.lastName, r.id, r.exam, r.score, r.total, r.finishedAt];
-        csvContent += row.join(",") + "\n";
-      }
+      const row = [r.firstName, r.lastName, r.id, r.exam, r.section || "", r.score, r.total, r.finishedAt];
+      csvContent += row.join(",") + "\n";
     });
 
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Exam_Results_${filter.replace(/\s+/g, '_')}.csv`);
+    const safeCourse = (course && course !== "ALL") ? course.replace(/\s+/g, '_') : "ALL";
+    const safeSection = (section && section !== "ALL") ? section : "ALL";
+    link.setAttribute("download", `Exam_Results_${safeCourse}_${safeSection}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -568,3 +633,4 @@
 </script>
 </body>
 </html>
+
