@@ -76,7 +76,12 @@
     margin: 12px 0;
     cursor: pointer;
     line-height: 1.4;
+    background: rgba(255,255,255,0.05);
+    padding: 10px;
+    border-radius: 8px;
+    transition: 0.2s;
   }
+  .option-label:hover { background: rgba(255,255,255,0.15); }
   .option-label input[type="radio"] {
     width: 20px;
     height: 20px;
@@ -119,8 +124,7 @@
   }
   .nav-controls { display: flex; gap: 10px; margin-top: 20px; }
   .btn-nav { background: #2980b9; }
-  .q-ans { background: #333; color: #333; }
-  .q-ans:focus { color: #fff; }
+  .q-ans { background: #333; color: #fff; }
 
   #cheatOverlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -133,7 +137,6 @@
   @media (max-width: 600px) {
     .container { margin: 10px auto; padding: 15px; }
     h2 { font-size: 1.2rem; }
-    .nav-controls { flex-direction: row; }
   }
 </style>
 </head>
@@ -293,6 +296,14 @@
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
+  // Helper: Fisher-Yates Shuffle
+  function shuffleArray(array) { 
+    for (let i = array.length - 1; i > 0; i--) { 
+      const j = Math.floor(Math.random() * (i + 1)); 
+      [array[i], array[j]] = [array[j], array[i]]; 
+    } 
+  }
+
   document.getElementById("uploadCsvBtn").onclick = function() {
     const fileInput = document.getElementById("csvFileInput");
     const section = document.getElementById("csvSectionSelect").value;
@@ -325,7 +336,7 @@
     push(ref(db, "violations"), {
         student: activeStudent.fName + " " + activeStudent.lName,
         id: activeStudent.id,
-        time: new Date().toLocaleString(), // Updated to include Date
+        time: new Date().toLocaleString(),
         type: "Tab Switch / Refresh / Window Blur"
     });
   }
@@ -390,14 +401,45 @@
     document.getElementById("studentExamPage").classList.remove("hidden");
     document.getElementById("studentInfoDisplay").innerText = `${activeStudent.fName} ${activeStudent.lName}`;
     examActive = true; 
+
+    // 1. Shuffle Questions
     shuffleArray(questions);
+    
     totalQuestions = questions.length;
     currentQuestionIndex = 0;
     const qContainer = document.getElementById("examQuestions");
     qContainer.innerHTML = "";
+
+    // 2. Render and Shuffle Choices
     questions.forEach((q, i) => {
-      qContainer.innerHTML += `<div class="student-q-wrapper hidden"><div class="question-block"><p style="font-weight:bold;">Q${i+1}: ${q.question}</p>${q.options.map((opt, j) => `<label class="option-label"><input type="radio" name="q${i}" value="${j+1}"> <span>${opt}</span></label>`).join('')}</div></div>`;
+      // Create Choice objects so we can track the original answer index
+      let choices = q.options.map((text, idx) => ({
+        text: text,
+        originalValue: (idx + 1).toString()
+      }));
+
+      // Shuffle the choices for THIS specific question
+      shuffleArray(choices);
+
+      const wrapper = document.createElement("div");
+      wrapper.className = "student-q-wrapper hidden";
+      
+      const optionsHTML = choices.map(choice => `
+        <label class="option-label">
+          <input type="radio" name="q${i}" value="${choice.originalValue}"> 
+          <span>${choice.text}</span>
+        </label>
+      `).join('');
+
+      wrapper.innerHTML = `
+        <div class="question-block">
+          <p style="font-weight:bold;">Q${i+1}: ${q.question}</p>
+          ${optionsHTML}
+        </div>
+      `;
+      qContainer.appendChild(wrapper);
     });
+
     showQuestion(0);
     startTimer(600); 
 
@@ -413,6 +455,7 @@
       let score = 0;
       for (let i = 0; i < questions.length; i++) {
         const sel = document.querySelector(`input[name="q${i}"]:checked`);
+        // We compare the selected "originalValue" against the database hashed answer
         if (sel && await hashData(sel.value) === questions[i].answer) score++;
       }
 
@@ -425,7 +468,7 @@
         exam: examType, 
         score: score, 
         total: questions.length, 
-        finishedAt: new Date().toLocaleString(), // CAPTURES DATE AND TIME
+        finishedAt: new Date().toLocaleString(),
         serverTime: serverTimestamp() 
       });
 
@@ -518,8 +561,6 @@
   document.getElementById("nextBtn").onclick = () => { if (currentQuestionIndex < totalQuestions - 1) showQuestion(++currentQuestionIndex); };
   document.getElementById("prevBtn").onclick = () => { if (currentQuestionIndex > 0) showQuestion(--currentQuestionIndex); };
 
-  function shuffleArray(array) { for (let i = array.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [array[i], array[j]] = [array[j], array[i]]; } }
-
   document.getElementById("sectionSelectStudent").onchange = async (e) => {
     const snap = await get(child(ref(db), "studentList/" + e.target.value));
     const sel = document.getElementById("studentSelect");
@@ -545,7 +586,22 @@
   function createQuestionBlock(qData = null) {
     const block = document.createElement("div");
     block.className = "question-block";
-    block.innerHTML = `<button class="btn-del" onclick="this.parentElement.remove()">Delete</button><input type="text" class="q-text" value="${qData ? qData.question : ''}" placeholder="Enter question..."><div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;"><input type="text" class="opt-1" value="${qData ? qData.options[0] : ''}" placeholder="A"><input type="text" class="opt-2" value="${qData ? qData.options[1] : ''}" placeholder="B"><input type="text" class="opt-3" value="${qData ? qData.options[2] : ''}" placeholder="C"><input type="text" class="opt-4" value="${qData ? qData.options[3] : ''}" placeholder="D"></div><select class="q-ans"><option value="1">A</option><option value="2">B</option><option value="3">C</option><option value="4">D</option></select>`;
+    block.innerHTML = `
+      <button class="btn-del" onclick="this.parentElement.remove()">Delete</button>
+      <input type="text" class="q-text" value="${qData ? qData.question : ''}" placeholder="Enter question...">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <input type="text" class="opt-1" value="${qData ? qData.options[0] : ''}" placeholder="A">
+        <input type="text" class="opt-2" value="${qData ? qData.options[1] : ''}" placeholder="B">
+        <input type="text" class="opt-3" value="${qData ? qData.options[2] : ''}" placeholder="C">
+        <input type="text" class="opt-4" value="${qData ? qData.options[3] : ''}" placeholder="D">
+      </div>
+      <select class="q-ans">
+        <option value="1">A</option>
+        <option value="2">B</option>
+        <option value="3">C</option>
+        <option value="4">D</option>
+      </select>
+    `;
     return block;
   }
 
