@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -47,7 +46,6 @@
   button:hover { background: #009e8e; transform: translateY(-2px); }
   button:disabled { background: #555 !important; cursor: not-allowed; }
   .hidden {display: none !important;}
-  
   table {
     width: 100%;
     border-collapse: collapse;
@@ -59,7 +57,6 @@
     overflow-x: auto;
   }
   th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; min-width: 100px; }
-  
   .question-block {
     background: rgba(255,255,255,0.1);
     padding: 15px;
@@ -68,7 +65,6 @@
     border-left: 5px solid #0ca16d;
     position: relative;
   }
-
   .option-label {
     display: flex;
     align-items: center;
@@ -76,19 +72,13 @@
     margin: 12px 0;
     cursor: pointer;
     line-height: 1.4;
-    background: rgba(255,255,255,0.05);
-    padding: 10px;
-    border-radius: 8px;
-    transition: 0.2s;
   }
-  .option-label:hover { background: rgba(255,255,255,0.15); }
   .option-label input[type="radio"] {
     width: 20px;
     height: 20px;
     margin: 0;
     flex-shrink: 0;
   }
-
   img { width:80px; height:80px; border-radius:50%; display: block; margin: 0 auto 10px; }
   .management-card {
     background: rgba(255,255,255,0.05);
@@ -124,8 +114,8 @@
   }
   .nav-controls { display: flex; gap: 10px; margin-top: 20px; }
   .btn-nav { background: #2980b9; }
-  .q-ans { background: #333; color: #fff; }
-
+  .q-ans { background: #333; color: #333; }
+  .q-ans:focus { color: #fff; }
   #cheatOverlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(0,0,0,0.98); z-index: 9999;
@@ -133,15 +123,14 @@
     padding: 20px;
   }
   .lock-box { background: #1a1a1a; padding: 30px; border-radius: 20px; border: 2px solid #e74c3c; width: 100%; max-width: 400px; }
-
   @media (max-width: 600px) {
     .container { margin: 10px auto; padding: 15px; }
     h2 { font-size: 1.2rem; }
+    .nav-controls { flex-direction: row; }
   }
 </style>
 </head>
 <body>
-
 <div id="cheatOverlay" class="hidden">
     <div class="lock-box">
         <h1 style="color:#e74c3c; margin-top:0; font-size: 24px;">EXAM LOCKED</h1>
@@ -151,17 +140,13 @@
         <button id="unlockExamBtn" style="background:#27ae60; margin-top:10px;">Unlock & Resume</button>
     </div>
 </div>
-
 <div class="container" id="loginContainer">
-  <img src="seyoum.jpg" alt="Instructor Logo">
+  <img src="seyoum.jpg" alt="Instructor Image">
   <h2 style="text-align:center;">Online Exam System</h2>
-  
   <h3>Instructor Login</h3>
   <input type="password" id="instructorPassword" placeholder="Enter Password">
   <button id="instructorLoginBtn">Login to Dashboard</button>
-  
   <hr>
-  
   <h3>Student Login</h3>
   <label>Select Section:</label>
   <select id="sectionSelectStudent">
@@ -176,7 +161,6 @@
   <select id="studentSelect">
     <option value="">-- Select Section First --</option>
   </select>
-  
   <label>Select Exam:</label>
   <select id="studentExamSelect">
     <option value="Engineering Thermodynamics">Engineering Thermodynamics</option>
@@ -185,13 +169,11 @@
   </select>
   <button id="studentLoginBtn">Login as Student</button>
 </div>
-
 <div class="container hidden" id="instructorPanel">
   <div style="display:flex; justify-content: space-between; align-items: center; gap: 10px;">
     <h2 style="margin:0; font-size: 18px;">Dashboard</h2>
     <button id="logoutInstructor" style="width: auto; background: #e74c3c; margin:0;">Logout</button>
   </div>
-
   <div class="management-card" style="background: rgba(41, 128, 185, 0.2); margin-top: 15px;">
     <h3>Student Management</h3>
     <label>Section:</label>
@@ -206,12 +188,10 @@
     <p style="font-size: 11px;">Format: <b>id, firstName, lastName</b></p>
     <button id="uploadCsvBtn" style="background: #27ae60;">Upload CSV</button>
   </div>
-
   <div class="management-card" style="border: 1px solid #e74c3c;">
     <h3 style="color:#e74c3c;">Cheating Incidents</h3>
     <div id="violationLogs" style="font-size: 13px; max-height: 120px; overflow-y: auto;">Waiting...</div>
   </div>
-  
   <div class="management-card">
     <h3>Exam Questions</h3>
     <select id="examSelect">
@@ -224,7 +204,6 @@
     <div id="questionsContainer"></div>
     <button id="saveExamBtn">Save All Changes</button>
   </div>
-  
   <hr>
   <h3>Student Results</h3>
   <div class="management-card">
@@ -238,23 +217,18 @@
   </div>
   <div id="studentResults"></div>
 </div>
-
 <div class="container hidden" id="studentExamPage">
   <div id="timerDisplay">Time Remaining: 10:00</div>
   <div style="display:flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
     <h2 id="examTitle" style="font-size: 18px; margin:0;"></h2>
     <div id="studentInfoDisplay" style="text-align: right; color: #0ca16d; font-weight: bold; font-size: 14px;"></div>
   </div>
-  
   <div id="examQuestions"></div>
-
   <div class="nav-controls" id="studentNavControls">
       <button id="prevBtn" class="btn-nav">Previous</button>
       <button id="nextBtn" class="btn-nav">Next</button>
   </div>
-
   <button id="submitExamBtn" class="hidden" style="background: #27ae60; margin-top: 20px;">Submit Exam</button>
-  
   <div id="finalScoreView" class="hidden">
       <div class="score-card">
           <h3>Exam Completed!</h3>
@@ -267,7 +241,6 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
   import { getDatabase, ref, set, get, child, push, serverTimestamp, onValue, remove, update } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-database.js";
-
   const firebaseConfig = {
     apiKey: "AIzaSyAQt0xCxcXJHHg5O-J6dzAdwQ6RxofscFo",
     authDomain: "exam-67a68.firebaseapp.com",
@@ -277,10 +250,8 @@
     appId: "1:8047123325:web:438c018b4809dfb92e8a14",
     measurementId: "G-5PSY50N9C0"
   };
-
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app); 
-
   let examTimer;
   let currentQuestionIndex = 0;
   let totalQuestions = 0;
@@ -294,14 +265,6 @@
     const msgUint8 = new TextEncoder().encode(value.toString() + SECRET_SALT);
     const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
     return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-  }
-
-  // Helper: Fisher-Yates Shuffle
-  function shuffleArray(array) { 
-    for (let i = array.length - 1; i > 0; i--) { 
-      const j = Math.floor(Math.random() * (i + 1)); 
-      [array[i], array[j]] = [array[j], array[i]]; 
-    } 
   }
 
   document.getElementById("uploadCsvBtn").onclick = function() {
@@ -360,10 +323,8 @@
     const raw = document.getElementById("studentSelect").value;
     const exam = document.getElementById("studentExamSelect").value;
     if (!section || !raw) return alert("Select section and name");
-
     const data = JSON.parse(raw);
     activeStudent = data;
-
     const resultsSnap = await get(child(ref(db), "results"));
     if (resultsSnap.exists()) {
         const results = Object.values(resultsSnap.val());
@@ -373,7 +334,6 @@
             return;
         }
     }
-
     const sessionPath = `activeSessions/${data.id.replace(/\//g, "_")}`;
     const sessionCheck = await get(child(ref(db), sessionPath));
     if (sessionCheck.exists() && sessionCheck.val().status === "active") {
@@ -384,14 +344,11 @@
         if(examSnap.exists()) prepareExamUI(examSnap.val());
         return; 
     }
-
     const passSnap = await get(child(ref(db), `examConfig/${section}`));
     const userInput = prompt(`Password for ${section}:`);
     if (userInput !== (passSnap.exists() ? passSnap.val().toString() : null)) return alert("Incorrect!");
-
     const examSnap = await get(child(ref(db), "exams/" + exam));
     if (!examSnap.exists()) return alert("Exam questions not found.");
-
     await set(ref(db, sessionPath), { status: "active", exam: exam });
     prepareExamUI(examSnap.val());
   };
@@ -404,40 +361,39 @@
 
     // 1. Shuffle Questions
     shuffleArray(questions);
-    
+
     totalQuestions = questions.length;
     currentQuestionIndex = 0;
     const qContainer = document.getElementById("examQuestions");
     qContainer.innerHTML = "";
 
-    // 2. Render and Shuffle Choices
     questions.forEach((q, i) => {
-      // Create Choice objects so we can track the original answer index
-      let choices = q.options.map((text, idx) => ({
-        text: text,
-        originalValue: (idx + 1).toString()
+      // 2. Create a Choice Map to maintain correct answer indexing after shuffle
+      let choices = q.options.map((opt, index) => ({
+        text: opt,
+        originalValue: index + 1
       }));
-
-      // Shuffle the choices for THIS specific question
+      
+      // 3. Shuffle Choices
       shuffleArray(choices);
 
-      const wrapper = document.createElement("div");
-      wrapper.className = "student-q-wrapper hidden";
+      const qWrapper = document.createElement("div");
+      qWrapper.className = "student-q-wrapper hidden";
       
-      const optionsHTML = choices.map(choice => `
+      const optionsHtml = choices.map(choice => `
         <label class="option-label">
           <input type="radio" name="q${i}" value="${choice.originalValue}"> 
           <span>${choice.text}</span>
         </label>
       `).join('');
 
-      wrapper.innerHTML = `
+      qWrapper.innerHTML = `
         <div class="question-block">
           <p style="font-weight:bold;">Q${i+1}: ${q.question}</p>
-          ${optionsHTML}
+          ${optionsHtml}
         </div>
       `;
-      qContainer.appendChild(wrapper);
+      qContainer.appendChild(qWrapper);
     });
 
     showQuestion(0);
@@ -448,19 +404,14 @@
       isSubmitting = true;
       document.getElementById("submitExamBtn").disabled = true;
       document.getElementById("submitExamBtn").innerText = "Saving Score...";
-
       examActive = false; 
       clearInterval(examTimer);
-
       let score = 0;
       for (let i = 0; i < questions.length; i++) {
         const sel = document.querySelector(`input[name="q${i}"]:checked`);
-        // We compare the selected "originalValue" against the database hashed answer
         if (sel && await hashData(sel.value) === questions[i].answer) score++;
       }
-
       const examType = document.getElementById("studentExamSelect").value;
-
       await push(ref(db, "results"), { 
         firstName: activeStudent.fName, 
         lastName: activeStudent.lName, 
@@ -468,12 +419,10 @@
         exam: examType, 
         score: score, 
         total: questions.length, 
-        finishedAt: new Date().toLocaleString(),
+        finishedAt: new Date().toLocaleString(), 
         serverTime: serverTimestamp() 
       });
-
       await remove(ref(db, `activeSessions/${activeStudent.id.replace(/\//g, "_")}`));
-
       document.getElementById("examQuestions").classList.add("hidden");
       document.getElementById("studentNavControls").classList.add("hidden");
       document.getElementById("submitExamBtn").classList.add("hidden");
@@ -561,6 +510,8 @@
   document.getElementById("nextBtn").onclick = () => { if (currentQuestionIndex < totalQuestions - 1) showQuestion(++currentQuestionIndex); };
   document.getElementById("prevBtn").onclick = () => { if (currentQuestionIndex > 0) showQuestion(--currentQuestionIndex); };
 
+  function shuffleArray(array) { for (let i = array.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [array[i], array[j]] = [array[j], array[i]]; } }
+
   document.getElementById("sectionSelectStudent").onchange = async (e) => {
     const snap = await get(child(ref(db), "studentList/" + e.target.value));
     const sel = document.getElementById("studentSelect");
@@ -586,22 +537,7 @@
   function createQuestionBlock(qData = null) {
     const block = document.createElement("div");
     block.className = "question-block";
-    block.innerHTML = `
-      <button class="btn-del" onclick="this.parentElement.remove()">Delete</button>
-      <input type="text" class="q-text" value="${qData ? qData.question : ''}" placeholder="Enter question...">
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-        <input type="text" class="opt-1" value="${qData ? qData.options[0] : ''}" placeholder="A">
-        <input type="text" class="opt-2" value="${qData ? qData.options[1] : ''}" placeholder="B">
-        <input type="text" class="opt-3" value="${qData ? qData.options[2] : ''}" placeholder="C">
-        <input type="text" class="opt-4" value="${qData ? qData.options[3] : ''}" placeholder="D">
-      </div>
-      <select class="q-ans">
-        <option value="1">A</option>
-        <option value="2">B</option>
-        <option value="3">C</option>
-        <option value="4">D</option>
-      </select>
-    `;
+    block.innerHTML = `<button class="btn-del" onclick="this.parentElement.remove()">Delete</button><input type="text" class="q-text" value="${qData ? qData.question : ''}" placeholder="Enter question..."><div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;"><input type="text" class="opt-1" value="${qData ? qData.options[0] : ''}" placeholder="A"><input type="text" class="opt-2" value="${qData ? qData.options[1] : ''}" placeholder="B"><input type="text" class="opt-3" value="${qData ? qData.options[2] : ''}" placeholder="C"><input type="text" class="opt-4" value="${qData ? qData.options[3] : ''}" placeholder="D"></div><select class="q-ans"><option value="1">A</option><option value="2">B</option><option value="3">C</option><option value="4">D</option></select>`;
     return block;
   }
 
