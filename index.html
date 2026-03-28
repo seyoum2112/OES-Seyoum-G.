@@ -152,6 +152,7 @@
   <select id="sectionSelectStudent">
     <option value="">-- Choose Section --</option>
     <option value="Section_A">Section A (Mechanical)</option>
+    <option value="Section_B">Section B (CEP EME)</option>
     <option value="Section_C">Section C (Electrical)</option>
     <option value="Section_D">Section D (Electrical)</option>
     <option value="Section_E">Section E (Electrical)</option>
@@ -179,6 +180,7 @@
     <label>Section:</label>
     <select id="csvSectionSelect">
         <option value="Section_A">Section A</option>
+         <option value="Section_B">Section B(CEP EME)</option>
         <option value="Section_C">Section C</option>
         <option value="Section_D">Section D</option>
         <option value="Section_E">Section E</option>
@@ -218,7 +220,7 @@
   <div id="studentResults"></div>
 </div>
 <div class="container hidden" id="studentExamPage">
-  <div id="timerDisplay">Time Remaining: 10:00</div>
+  <div id="timerDisplay">Time Remaining: 20:00</div>
   <div style="display:flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
     <h2 id="examTitle" style="font-size: 18px; margin:0;"></h2>
     <div id="studentInfoDisplay" style="text-align: right; color: #0ca16d; font-weight: bold; font-size: 14px;"></div>
@@ -359,7 +361,7 @@
     document.getElementById("studentInfoDisplay").innerText = `${activeStudent.fName} ${activeStudent.lName}`;
     examActive = true; 
 
-    // 1. Shuffle Questions
+    // Shuffle questions
     shuffleArray(questions);
 
     totalQuestions = questions.length;
@@ -368,13 +370,12 @@
     qContainer.innerHTML = "";
 
     questions.forEach((q, i) => {
-      // 2. Create a Choice Map to maintain correct answer indexing after shuffle
+      // Map choices to maintain original answer indexing
       let choices = q.options.map((opt, index) => ({
         text: opt,
         originalValue: index + 1
       }));
       
-      // 3. Shuffle Choices
       shuffleArray(choices);
 
       const qWrapper = document.createElement("div");
@@ -399,6 +400,7 @@
     showQuestion(0);
     startTimer(600); 
 
+    // Handle Submission
     document.getElementById("submitExamBtn").onclick = async () => {
       if (isSubmitting) return; 
       isSubmitting = true;
@@ -406,11 +408,19 @@
       document.getElementById("submitExamBtn").innerText = "Saving Score...";
       examActive = false; 
       clearInterval(examTimer);
+      
       let score = 0;
+      // Loop through shuffled list and compare directly with matching input name
       for (let i = 0; i < questions.length; i++) {
         const sel = document.querySelector(`input[name="q${i}"]:checked`);
-        if (sel && await hashData(sel.value) === questions[i].answer) score++;
+        if (sel) {
+          const hashedSelection = await hashData(sel.value);
+          if (hashedSelection === questions[i].answer) {
+            score++;
+          }
+        }
       }
+
       const examType = document.getElementById("studentExamSelect").value;
       await push(ref(db, "results"), { 
         firstName: activeStudent.fName, 
@@ -423,6 +433,7 @@
         serverTime: serverTimestamp() 
       });
       await remove(ref(db, `activeSessions/${activeStudent.id.replace(/\//g, "_")}`));
+      
       document.getElementById("examQuestions").classList.add("hidden");
       document.getElementById("studentNavControls").classList.add("hidden");
       document.getElementById("submitExamBtn").classList.add("hidden");
