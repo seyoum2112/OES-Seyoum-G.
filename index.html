@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Online Exam System</title>
-<!-- Font Awesome Icons for Portal Buttons -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
   :root {
@@ -35,7 +34,6 @@
     100% {background-position: 0% 50%;}
   }
 
-  /* --- Container & Layout Base --- */
   .container {
     max-width: 1000px;
     margin: 20px auto;
@@ -50,7 +48,7 @@
     width: 100%;
     padding: 12px;
     margin: 20px 0;
-    border: 20px;
+    border: 0;
     border-radius: 10px;
     box-sizing: border-box;
     font-size: 15px;
@@ -66,7 +64,6 @@
   button:hover { background: var(--primary-hover); transform: translateY(-1px); }
   button:disabled { background: #b6aeae !important; cursor: not-allowed; transform: none !important; }
 
-  /* --- Portal Select Buttons --- */
   .portal-label {
     display: block;
     font-size: 18px;
@@ -115,7 +112,6 @@
 
   img { width: 80px; height: 80px; border-radius: 50%; display: block; margin: 0 auto 10px; }
 
-  /* --- Top Sticky Exam Header --- */
   .sticky-header {
     position: sticky;
     top: 0;
@@ -145,7 +141,6 @@
     display: inline-block;
   }
 
-  /* --- Progress Bar --- */
   .progress-wrapper {
     background: #e0e0e0;
     border-radius: 10px;
@@ -161,7 +156,6 @@
     transition: width 0.3s ease;
   }
 
-  /* --- Student Exam Page Layout --- */
   #studentExamPage {
     background: var(--exam-bg) !important;
     color: var(--exam-text);
@@ -215,7 +209,6 @@
     border-top: 1px solid #e0e0e0;
   }
 
-  /* --- Interactive Palette Grid --- */
   .palette-box {
     background: #f8f9fa;
     padding: 15px;
@@ -263,7 +256,6 @@
   .palette-legend span { display: flex; align-items: center; gap: 4px; }
   .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 
-  /* --- Instructor Dashboard Tabs --- */
   .dashboard-tabs {
     display: flex;
     gap: 8px;
@@ -301,7 +293,6 @@
   }
   th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; min-width: 100px; }
 
-  /* --- Modals & Overlays --- */
   .modal-overlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(0,0,0,0.85); z-index: 9999;
@@ -336,7 +327,6 @@
     .filter-grid { grid-template-columns: 1fr; }
   }
 
-  /* Question Builder Card Styling */
   .q-editor-card {
     background: rgba(255,255,255,0.08);
     border: 1px solid rgba(255,255,255,0.2);
@@ -344,8 +334,18 @@
     margin: 15px 0;
     border-radius: 12px;
   }
-  .q-editor-card input, .q-editor-card select {
-    margin: 6px 0;
+
+  .q-editor-card input, 
+  .q-editor-card select {
+    margin: 8px 0;
+    background-color: #ffffff !important;
+    color: #111111 !important;
+    border: 1px solid #cccccc;
+  }
+
+  .q-editor-card select option {
+    background-color: #ffffff !important;
+    color: #111111 !important;
   }
 </style>
 </head>
@@ -413,7 +413,7 @@
       <option value="">-- Choose Section --</option>
       <option value="Section_A">Section A (Mechanical)</option>
       <option value="Section_B">Section B (Extension EME)</option>
-      <option value="Section_B">Section B (Extenstion ECE)</option>
+      <option value="Section_B_ECE">Section B (Extension ECE)</option>
       <option value="Section_C">Section C (Electrical)</option>
       <option value="Section_D">Section D (Electrical)</option>
       <option value="Section_E">Section E (Electrical)</option>
@@ -476,15 +476,16 @@
       <select id="csvSectionSelect">
           <option value="Section_A">Section A (Mechanical)</option>
           <option value="Section_B">Section B (Extension EME)</option>
-          <option value="Section_B">Section B (Extension ECE)</option>
+          <option value="Section_B_ECE">Section B (Extension ECE)</option>
           <option value="Section_C">Section C (Electrical)</option>
           <option value="Section_D">Section D (Electrical)</option>
           <option value="Section_E">Section E (Electrical)</option>
           <option value="Section_8">Section 8 (Freshman)</option>
       </select>
-      <input type="file" id="csvFileInput" accept=".csv" style="background: #fff; color: #000;">
-      <p style="font-size: 11px; opacity: 0.8;">Expected format: <b>id, firstName, lastName</b></p>
+      <input type="file" id="csvFileInput" accept=".csv, .txt" style="background: #fff; color: #000;">
+      <p style="font-size: 11px; opacity: 0.8;">Expected format: <b>id, firstName, lastName</b> (e.g. CEP0001/16, Abraham, Yimam)</p>
       <button id="uploadCsvBtn" class="btn-success">Upload and Save List</button>
+      <div id="uploadStatusMessage" style="margin-top:10px; font-weight:bold; font-size:14px;"></div>
     </div>
   </div>
 
@@ -493,7 +494,6 @@
     <div class="management-card">
       <h3>Students Results</h3>
       
-      <!-- Integrated Subject & Section Filter Grid -->
       <div class="filter-grid">
         <div>
           <label style="font-size: 12px; opacity: 0.9;">Select Subject:</label>
@@ -509,7 +509,7 @@
               <option value="ALL">All Sections</option>
               <option value="Section_A">Section A (Mechanical)</option>
               <option value="Section_B">Section B (Extension EME)</option>
-              <option value="Section_B">Section B (Extension ECE)</option>
+              <option value="Section_B_ECE">Section B (Extension ECE)</option>
               <option value="Section_C">Section C (Electrical)</option>
               <option value="Section_D">Section D (Electrical)</option>
               <option value="Section_E">Section E (Electrical)</option>
@@ -535,7 +535,6 @@
 <!-- STUDENT EXAM INTERFACE -->
 <div class="container hidden" id="studentExamPage">
   
-  <!-- Sticky Top Bar -->
   <div class="sticky-header">
     <div>
       <h2 id="examTitle">Exam Title</h2>
@@ -547,15 +546,12 @@
     </div>
   </div>
 
-  <!-- Overall Progress Bar -->
   <div class="progress-wrapper">
     <div class="progress-bar" id="examProgressBar"></div>
   </div>
 
-  <!-- Main Grid: Questions on Left, Navigation Palette on Right -->
   <div class="exam-grid-container" id="examMainContent">
     
-    <!-- Question Display Area -->
     <div>
       <div id="examQuestions"></div>
       
@@ -567,7 +563,6 @@
       <button id="triggerSubmitBtn" class="btn-success" style="margin-top: 20px; font-size: 16px; padding: 14px;">Review & Submit Exam</button>
     </div>
 
-    <!-- Side Question Palette -->
     <aside class="palette-box">
       <h4>Question Palette</h4>
       <div class="palette-grid" id="questionPaletteGrid"></div>
@@ -580,11 +575,10 @@
     </aside>
   </div>
 
-  <!-- Final Score View -->
   <div id="finalScoreView" class="hidden">
       <div class="score-card">
           <h3>Exam Completed & Submitted</h3>
-          <p>Your results have been successfully transmitted to your instructor Seyoum G.</p>
+          <p>Your results have been successfully transmitted to your instructor.</p>
           <div class="score-circle" id="displayScoreValue">0 / 0</div>
           <button onclick="location.reload()" class="btn-primary" style="width: 100%;">Return to Home</button>
       </div>
@@ -593,7 +587,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-  import { getDatabase, ref, set, get, child, push, serverTimestamp, onValue, remove } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-database.js";
+  import { getDatabase, ref, set, get, child, push, serverTimestamp, onValue } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-database.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDa9jPhx9LYIUPqDWQQjSOpSj43MUOSuQo",
@@ -618,14 +612,6 @@
   let studentAnswers = {};
   let flaggedQuestions = new Set();
 
-  const SECRET_SALT = "AASTU_EE_SECURE_2026"; 
-  async function hashData(value) {
-    const msgUint8 = new TextEncoder().encode(value.toString() + SECRET_SALT);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-  }
-
-  // --- Portal Switching Functions ---
   window.openPortalView = function(type) {
     document.getElementById("roleSelectionView").classList.add("hidden");
     if (type === 'student') {
@@ -641,7 +627,6 @@
     document.getElementById("roleSelectionView").classList.remove("hidden");
   };
 
-  // --- INSTRUCTOR LOGIN HANDLER ---
   document.getElementById("instructorLoginBtn").onclick = async () => {
     const passInput = document.getElementById("instructorPassword").value.trim();
     if (!passInput) return alert("Please enter the instructor password.");
@@ -663,12 +648,10 @@
     }
   };
 
-  // --- Color Customization ---
   document.getElementById("textColorPicker").addEventListener("input", (e) => {
     document.documentElement.style.setProperty("--exam-text", e.target.value);
   });
 
-  // --- Dynamic Student Dropdown Population Listener ---
   document.getElementById("sectionSelectStudent").addEventListener("change", async (e) => {
     const selectedSection = e.target.value;
     const studentSelect = document.getElementById("studentSelect");
@@ -705,26 +688,23 @@
     }
   });
 
-  // --- Navigation Tab Switcher for Instructor ---
   window.switchDashboardTab = function(tabId) {
     document.querySelectorAll(".tab-content").forEach(el => el.classList.add("hidden"));
     document.querySelectorAll(".tab-btn").forEach(el => el.classList.remove("active"));
     document.getElementById(tabId).classList.remove("hidden");
-    if (event && event.target) {
-      event.target.classList.add("active");
+    if (window.event && window.event.target) {
+      window.event.target.classList.add("active");
     }
     if (tabId === 'tab-results') {
       fetchAndRenderResults();
     }
   };
 
-  // --- QUESTION BANK EDITOR LOGIC ---
   const examSelect = document.getElementById("examSelect");
   const questionsContainer = document.getElementById("questionsContainer");
   const addNewQuestionBtn = document.getElementById("addNewQuestionBtn");
   const saveExamBtn = document.getElementById("saveExamBtn");
 
-  // Load Existing Questions when Subject Changed
   examSelect.addEventListener("change", async () => {
     const selectedSubject = examSelect.value;
     questionsContainer.innerHTML = "";
@@ -742,14 +722,18 @@
     }
   });
 
-  // Render Question Builder Card
   function renderQuestionCard(qData = null) {
     const card = document.createElement("div");
     card.className = "q-editor-card";
 
     const qText = qData ? qData.question || "" : "";
     const options = qData && qData.options ? qData.options : ["", "", "", ""];
-    const correctIdx = qData && qData.correctAnswer !== undefined ? qData.correctAnswer : 0;
+    
+    // Convert legacy numeric index format to string if needed
+    let storedAnswer = qData ? qData.correctAnswer : "";
+    if (typeof storedAnswer === "number" && options[storedAnswer] !== undefined) {
+      storedAnswer = options[storedAnswer];
+    }
 
     card.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
@@ -763,10 +747,10 @@
       <input type="text" class="q-opt" placeholder="Option D" value="${options[3] || ''}">
       <label style="font-size: 13px; color: #cbd5e1;">Correct Option:</label>
       <select class="q-correct">
-        <option value="0" ${correctIdx == 0 ? 'selected' : ''}>Option A</option>
-        <option value="1" ${correctIdx == 1 ? 'selected' : ''}>Option B</option>
-        <option value="2" ${correctIdx == 2 ? 'selected' : ''}>Option C</option>
-        <option value="3" ${correctIdx == 3 ? 'selected' : ''}>Option D</option>
+        <option value="0" ${storedAnswer && storedAnswer === options[0] ? 'selected' : ''}>Option A</option>
+        <option value="1" ${storedAnswer && storedAnswer === options[1] ? 'selected' : ''}>Option B</option>
+        <option value="2" ${storedAnswer && storedAnswer === options[2] ? 'selected' : ''}>Option C</option>
+        <option value="3" ${storedAnswer && storedAnswer === options[3] ? 'selected' : ''}>Option D</option>
       </select>
     `;
 
@@ -774,7 +758,6 @@
     questionsContainer.appendChild(card);
   }
 
-  // "+ Add New Question" Button Click Event
   addNewQuestionBtn.addEventListener("click", () => {
     if (!examSelect.value) {
       return alert("Please select a subject first!");
@@ -782,7 +765,6 @@
     renderQuestionCard();
   });
 
-  // Save Questions to Firebase
   saveExamBtn.addEventListener("click", async () => {
     const selectedSubject = examSelect.value;
     if (!selectedSubject) return alert("Select an exam subject first.");
@@ -794,9 +776,12 @@
       const question = card.querySelector(".q-text").value.trim();
       const optionInputs = card.querySelectorAll(".q-opt");
       const options = Array.from(optionInputs).map(opt => opt.value.trim());
-      const correctAnswer = parseInt(card.querySelector(".q-correct").value, 10);
+      const selectedIndex = parseInt(card.querySelector(".q-correct").value, 10);
+      
+      // Save the actual option text string in Database
+      const correctAnswer = options[selectedIndex];
 
-      if (question) {
+      if (question && correctAnswer) {
         questionList.push({ question, options, correctAnswer });
       }
     });
@@ -810,150 +795,415 @@
     }
   });
 
-  // --- Fetch & Filter Results by Subject AND Section ---
-  async function fetchAndRenderResults() {
-    const selectedExam = document.getElementById("resultFilterSelect").value;
-    const selectedSection = document.getElementById("resultSectionFilterSelect").value;
-    const resultsContainer = document.getElementById("studentResults");
-    
-    resultsContainer.innerHTML = "<p style='color:#000;'>Loading results...</p>";
+  const csvFileInput = document.getElementById("csvFileInput");
+  const csvSectionSelect = document.getElementById("csvSectionSelect");
+  const uploadCsvBtn = document.getElementById("uploadCsvBtn");
+  const statusMsg = document.getElementById("uploadStatusMessage");
+
+  uploadCsvBtn.addEventListener("click", () => {
+    const file = csvFileInput.files[0];
+    const targetSection = csvSectionSelect.value;
+
+    if (!file) {
+      statusMsg.style.color = "#e74c3c";
+      statusMsg.innerText = "Please select a CSV file to upload.";
+      return;
+    }
+
+    statusMsg.style.color = "#38bdf8";
+    statusMsg.innerText = "Reading file content...";
+
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+      const text = e.target.result;
+      const parsedStudents = parseCSV(text);
+      const studentCount = Object.keys(parsedStudents).length;
+
+      if (studentCount === 0) {
+        statusMsg.style.color = "#e74c3c";
+        statusMsg.innerText = "Could not parse any valid student records from the CSV file.";
+        return;
+      }
+
+      statusMsg.innerText = `Uploading ${studentCount} students to studentList/${targetSection}...`;
+
+      set(ref(db, `studentList/${targetSection}`), parsedStudents)
+        .then(() => {
+          statusMsg.style.color = "#27ae60";
+          statusMsg.innerText = `Successfully uploaded ${studentCount} students to ${targetSection}!`;
+          csvFileInput.value = ""; 
+        })
+        .catch((error) => {
+          console.error("Firebase upload error:", error);
+          statusMsg.style.color = "#e74c3c";
+          statusMsg.innerText = `Upload Failed: ${error.message}`;
+        });
+    };
+
+    reader.onerror = function() {
+      statusMsg.style.color = "#e74c3c";
+      statusMsg.innerText = "Error reading file from disk.";
+    };
+
+    reader.readAsText(file);
+  });
+
+  function parseCSV(text) {
+    const lines = text.split(/\r?\n/);
+    const studentsMap = {};
+
+    lines.forEach((line, index) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+
+      const cols = trimmed
+        .split(/[,;\t]+/)
+        .map(col => col.replace(/^["']|["']$/g, '').trim());
+
+      if (cols.length < 3) return;
+
+      const rawId = cols[0];
+      const firstName = cols[1];
+      const lastName = cols[2];
+
+      if (index === 0 && (rawId.toLowerCase().includes("id") || firstName.toLowerCase().includes("name"))) {
+        return;
+      }
+
+      const safeKey = rawId.replace(/[\/.$\[\]#]/g, "_");
+
+      if (safeKey) {
+        studentsMap[safeKey] = {
+          id: rawId,
+          firstName: firstName,
+          lastName: lastName
+        };
+      }
+    });
+
+    return studentsMap;
+  }
+
+  document.getElementById("studentLoginBtn").addEventListener("click", async () => {
+    const studentSelect = document.getElementById("studentSelect");
+    const subjectSelect = document.getElementById("studentExamSelect");
+
+    if (!studentSelect.value) {
+      return alert("Please select your section and student name first.");
+    }
+    if (!subjectSelect.value) {
+      return alert("Please select an exam subject.");
+    }
+
+    activeStudent = JSON.parse(studentSelect.value);
+    currentExamName = subjectSelect.value;
 
     try {
-      const snapshot = await get(child(ref(db), "results"));
-      if (!snapshot.exists()) {
-        resultsContainer.innerHTML = "<p style='color:#000;'>No exam submissions found.</p>";
-        return;
+      const snap = await get(child(ref(db), `exams/${currentExamName}`));
+      if (!snap.exists() || !snap.val().length) {
+        return alert("No exam questions found for this subject. Please contact your instructor.");
       }
 
-      const allResults = Object.values(snapshot.val());
-      
-      const filtered = allResults.filter(item => {
-        const matchExam = item.exam === selectedExam;
-        const matchSection = (selectedSection === "ALL") || (item.section === selectedSection);
-        return matchExam && matchSection;
-      });
+      rawLoadedQuestions = snap.val();
+      totalQuestions = rawLoadedQuestions.length;
 
-      if (filtered.length === 0) {
-        resultsContainer.innerHTML = "<p style='color:#000;'>No records match the chosen subject/section filters.</p>";
-        return;
-      }
+      document.getElementById("examTitle").innerText = currentExamName;
+      document.getElementById("studentInfoDisplay").innerText = `${activeStudent.fName} ${activeStudent.lName} (${activeStudent.id})`;
 
-      let html = `
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Name</th>
-              <th>Score</th>
-              <th>Submitted</th>
-            </tr>
-          </thead>
-          <tbody>
+      document.getElementById("loginContainer").classList.add("hidden");
+      document.getElementById("studentExamPage").classList.remove("hidden");
+
+      currentQuestionIndex = 0;
+      studentAnswers = {};
+      flaggedQuestions.clear();
+      examActive = true;
+
+      renderQuestion(currentQuestionIndex);
+      renderPalette();
+      startExamTimer(60 * 60);
+      initAntiCheat();
+
+    } catch (err) {
+      console.error("Error launching exam:", err);
+      alert("Failed to load exam. Please try again.");
+    }
+  });
+
+  function renderQuestion(index) {
+    const container = document.getElementById("examQuestions");
+    const qData = rawLoadedQuestions[index];
+
+    const shuffledOptions = [...qData.options].sort(() => Math.random() - 0.5);
+
+    let optionsHTML = "";
+    shuffledOptions.forEach((opt) => {
+      const isChecked = studentAnswers[index] === opt ? "checked" : "";
+      const safeOpt = opt.replace(/'/g, "\\'");
+      optionsHTML += `
+        <label class="option-label">
+          <input type="radio" name="questionOption" value="${opt}" ${isChecked} 
+                 onchange="selectAnswerByValue(${index}, '${safeOpt}')">
+          <span>${opt}</span>
+        </label>
       `;
+    });
 
-      filtered.forEach(res => {
-        const studentName = res.name || `${res.fName || ''} ${res.lName || ''}`.trim() || "N/A";
-        const timeDisplay = res.submittedAt || res.time || "N/A";
-        html += `
-          <tr>
-            <td>${res.id}</td>
-            <td>${studentName}</td>
-            <td>${res.score}</td>
-            <td>${timeDisplay}</td>
-          </tr>
-        `;
+    const isFlagged = flaggedQuestions.has(index);
+
+    container.innerHTML = `
+      <div class="question-block">
+        <h3>Question ${index + 1} of ${totalQuestions}</h3>
+        <p style="font-size: 16px; font-weight: 500;">${qData.question}</p>
+        <div>${optionsHTML}</div>
+        <div class="question-toolbar">
+          <button class="btn-text" onclick="toggleFlag(${index})">
+            ${isFlagged ? "🚩 Unflag Question" : "🏳️ Flag for Review"}
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById("prevBtn").disabled = index === 0;
+    document.getElementById("nextBtn").disabled = index === totalQuestions - 1;
+    updateProgressBar();
+  }
+
+  window.selectAnswerByValue = function(qIndex, selectedValue) {
+    studentAnswers[qIndex] = selectedValue;
+    renderPalette();
+    updateProgressBar();
+  };
+
+  window.toggleFlag = function(qIndex) {
+    if (flaggedQuestions.has(qIndex)) {
+      flaggedQuestions.delete(qIndex);
+    } else {
+      flaggedQuestions.add(qIndex);
+    }
+    renderQuestion(qIndex);
+    renderPalette();
+  };
+
+  document.getElementById("prevBtn").onclick = () => {
+    if (currentQuestionIndex > 0) {
+      currentQuestionIndex--;
+      renderQuestion(currentQuestionIndex);
+      renderPalette();
+    }
+  };
+
+  document.getElementById("nextBtn").onclick = () => {
+    if (currentQuestionIndex < totalQuestions - 1) {
+      currentQuestionIndex++;
+      renderQuestion(currentQuestionIndex);
+      renderPalette();
+    }
+  };
+
+  function renderPalette() {
+    const grid = document.getElementById("questionPaletteGrid");
+    grid.innerHTML = "";
+
+    for (let i = 0; i < totalQuestions; i++) {
+      const chip = document.createElement("button");
+      chip.className = "palette-chip";
+      chip.innerText = i + 1;
+
+      if (i === currentQuestionIndex) chip.classList.add("active");
+      if (studentAnswers[i] !== undefined) chip.classList.add("answered");
+      if (flaggedQuestions.has(i)) chip.classList.add("flagged");
+
+      chip.onclick = () => {
+        currentQuestionIndex = i;
+        renderQuestion(currentQuestionIndex);
+        renderPalette();
+      };
+
+      grid.appendChild(chip);
+    }
+  }
+
+  function updateProgressBar() {
+    const answeredCount = Object.keys(studentAnswers).length;
+    const percentage = (answeredCount / totalQuestions) * 100;
+    document.getElementById("examProgressBar").style.width = `${percentage}%`;
+  }
+
+  function startExamTimer(durationSeconds) {
+    let timer = durationSeconds;
+    const display = document.getElementById("timerDisplay");
+
+    clearInterval(examTimer);
+    examTimer = setInterval(() => {
+      const minutes = parseInt(timer / 60, 10);
+      const seconds = parseInt(timer % 60, 10);
+
+      display.textContent = `Time: ${minutes < 10 ? "0" + minutes : minutes}:${seconds < 10 ? "0" + seconds : seconds}`;
+
+      if (--timer < 0) {
+        clearInterval(examTimer);
+        alert("Time is up! Submitting exam automatically.");
+        submitExam();
+      }
+    }, 1000);
+  }
+
+  document.getElementById("triggerSubmitBtn").onclick = () => {
+    const answered = Object.keys(studentAnswers).length;
+    const flagged = flaggedQuestions.size;
+    const unanswered = totalQuestions - answered;
+
+    document.getElementById("modalAnsweredCount").innerText = answered;
+    document.getElementById("modalFlaggedCount").innerText = flagged;
+    document.getElementById("modalUnansweredCount").innerText = unanswered;
+
+    document.getElementById("submitModal").classList.remove("hidden");
+  };
+
+  document.getElementById("cancelSubmitBtn").onclick = () => {
+    document.getElementById("submitModal").classList.add("hidden");
+  };
+
+  document.getElementById("confirmSubmitBtn").onclick = () => {
+    document.getElementById("submitModal").classList.add("hidden");
+    submitExam();
+  };
+
+  async function submitExam() {
+    examActive = false;
+    clearInterval(examTimer);
+
+    let score = 0;
+    rawLoadedQuestions.forEach((q, idx) => {
+      let correctText = q.correctAnswer;
+      // Convert legacy numeric index format to string value if needed
+      if (typeof correctText === "number" && q.options[correctText] !== undefined) {
+        correctText = q.options[correctText];
+      }
+
+      if (studentAnswers[idx] === correctText) {
+        score++;
+      }
+    });
+
+    const resultPayload = {
+      studentId: activeStudent.id,
+      studentName: `${activeStudent.fName} ${activeStudent.lName}`,
+      section: activeStudent.section,
+      subject: currentExamName,
+      score: score,
+      total: totalQuestions,
+      percentage: ((score / totalQuestions) * 100).toFixed(2),
+      submittedAt: serverTimestamp()
+    };
+
+    try {
+      const safeStudentKey = activeStudent.id.replace(/[\/.$\[\]#]/g, "_");
+      await set(ref(db, `results/${currentExamName}/${activeStudent.section}/${safeStudentKey}`), resultPayload);
+
+      document.getElementById("examMainContent").classList.add("hidden");
+      document.getElementById("finalScoreView").classList.remove("hidden");
+      document.getElementById("displayScoreValue").innerText = `${score} / ${totalQuestions}`;
+    } catch (err) {
+      console.error("Submission failed:", err);
+      alert("Failed to record score. Please notify your instructor.");
+    }
+  }
+
+  function initAntiCheat() {
+    window.addEventListener("blur", triggerCheatLock);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) triggerCheatLock();
+    });
+  }
+
+  function triggerCheatLock() {
+    if (!examActive) return;
+    document.getElementById("cheatOverlay").classList.remove("hidden");
+
+    const safeStudentKey = activeStudent.id.replace(/[\/.$\[\]#]/g, "_");
+    push(ref(db, `violations/${safeStudentKey}`), {
+      studentName: `${activeStudent.fName} ${activeStudent.lName}`,
+      section: activeStudent.section,
+      timestamp: serverTimestamp(),
+      event: "Window Focus Lost / Tab Switched"
+    });
+  }
+
+  document.getElementById("unlockExamBtn").onclick = async () => {
+    const inputPass = document.getElementById("unlockPassInput").value.trim();
+    const snap = await get(child(ref(db), "adminConfig/instructorKey"));
+    const validPass = snap.exists() ? snap.val().toString() : "admin123";
+
+    if (inputPass === validPass) {
+      document.getElementById("unlockPassInput").value = "";
+      document.getElementById("cheatOverlay").classList.add("hidden");
+    } else {
+      alert("Invalid instructor passcode!");
+    }
+  };
+
+  async function fetchAndRenderResults() {
+    const subject = document.getElementById("resultFilterSelect").value;
+    const section = document.getElementById("resultSectionFilterSelect").value;
+    const resultsContainer = document.getElementById("studentResults");
+
+    resultsContainer.innerHTML = "<p style='color:#fff;'>Loading results...</p>";
+
+    try {
+      const snap = await get(child(ref(db), `results/${subject}`));
+      if (!snap.exists()) {
+        resultsContainer.innerHTML = "<p style='color:#fff;'>No submissions recorded yet for this subject.</p>";
+        return;
+      }
+
+      let html = `<table><thead><tr><th>Student ID</th><th>Name</th><th>Section</th><th>Score</th><th>Percentage</th></tr></thead><tbody>`;
+      const data = snap.val();
+
+      Object.keys(data).forEach(secKey => {
+        if (section === "ALL" || section === secKey) {
+          Object.values(data[secKey]).forEach(res => {
+            html += `<tr>
+              <td>${res.studentId}</td>
+              <td>${res.studentName}</td>
+              <td>${res.section}</td>
+              <td>${res.score} / ${res.total}</td>
+              <td>${res.percentage}%</td>
+            </tr>`;
+          });
+        }
       });
 
-      html += "</tbody></table>";
+      html += `</tbody></table>`;
       resultsContainer.innerHTML = html;
     } catch (err) {
       console.error("Error retrieving results:", err);
-      resultsContainer.innerHTML = "<p style='color:#000;'>Error loading results from database.</p>";
+      resultsContainer.innerHTML = "<p style='color:#e74c3c;'>Failed to load student results.</p>";
     }
   }
 
   document.getElementById("resultFilterSelect").addEventListener("change", fetchAndRenderResults);
   document.getElementById("resultSectionFilterSelect").addEventListener("change", fetchAndRenderResults);
 
-  // Export Results to CSV/Excel
-  document.getElementById("downloadExcelBtn").onclick = () => {
-    const table = document.querySelector("#studentResults table");
-    if (!table) return alert("No results table available to export.");
-
-    let csv = [];
-    for (let row of table.rows) {
-      let cols = Array.from(row.cells).map(cell => `"${cell.innerText.replace(/"/g, '""')}"`);
-      csv.push(cols.join(","));
-    }
-
-    const blob = new Blob([csv.join("\n")], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Exam_Results_${document.getElementById("resultFilterSelect").value}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-  };
-
-  // Security Violations Listener
   function listenToViolations() {
-    const logsContainer = document.getElementById("violationLogs");
     onValue(ref(db, "violations"), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.val();
-        logsContainer.innerHTML = "";
-        Object.values(data).reverse().forEach(log => {
-          const item = document.createElement("div");
-          item.style.padding = "6px 0";
-          item.style.borderBottom = "1px solid rgba(255,255,255,0.1)";
-          item.innerHTML = `<strong>${log.student || 'Unknown'}</strong> (${log.section || 'N/A'}) - ${log.reason} <span style="opacity:0.6; font-size:10px;">${log.time || ''}</span>`;
-          logsContainer.appendChild(item);
-        });
-      } else {
-        logsContainer.innerHTML = "No security violations reported yet.";
+      const logsDiv = document.getElementById("violationLogs");
+      if (!snapshot.exists()) {
+        logsDiv.innerHTML = "<p>No security violations recorded.</p>";
+        return;
       }
+      let html = "<ul style='padding-left:20px; color:#fff;'>";
+      snapshot.forEach(childSnap => {
+        childSnap.forEach(violation => {
+          const v = violation.val();
+          html += `<li><b>${v.studentName}</b> (${v.section}): ${v.event}</li>`;
+        });
+      });
+      html += "</ul>";
+      logsDiv.innerHTML = html;
     });
   }
-
-  // Upload Student CSV List Handler
-  document.getElementById("uploadCsvBtn").onclick = async () => {
-    const targetSection = document.getElementById("csvSectionSelect").value;
-    const fileInput = document.getElementById("csvFileInput");
-    if (!fileInput.files.length) return alert("Please select a CSV file first.");
-
-    const file = fileInput.files[0];
-    const reader = new FileReader();
-
-    reader.onload = async (e) => {
-      const text = e.target.result;
-      const lines = text.split("\n");
-      const studentsMap = {};
-
-      lines.forEach((line, index) => {
-        if (!line.trim()) return;
-        const parts = line.split(",").map(p => p.trim());
-        if (index === 0 && (parts[0].toLowerCase() === "id" || parts[1].toLowerCase() === "firstname")) return;
-
-        if (parts.length >= 3) {
-          const id = parts[0];
-          const firstName = parts[1];
-          const lastName = parts[2];
-          studentsMap[id] = { id, firstName, lastName };
-        }
-      });
-
-      try {
-        await set(ref(db, `studentList/${targetSection}`), studentsMap);
-        alert(`Successfully uploaded ${Object.keys(studentsMap).length} students to ${targetSection}!`);
-        fileInput.value = "";
-      } catch (err) {
-        console.error("Error saving student list:", err);
-        alert("Failed to upload student list.");
-      }
-    };
-
-    reader.readAsText(file);
-  };
 </script>
 </body>
 </html>
