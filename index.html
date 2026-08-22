@@ -884,10 +884,20 @@
     return studentsMap;
   }
 
-  // --- STUDENT EXAM LOGIC ---
+  // Fisher-Yates array shuffle function for randomizing question sequence
+  function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+  }
+
+  // --- STUDENT EXAM LOGIC WITH RETAKE PROHIBITION & SHUFFLING ---
   document.getElementById("studentLoginBtn").addEventListener("click", async () => {
     const studentSelect = document.getElementById("studentSelect");
     const subjectSelect = document.getElementById("studentExamSelect");
+    const sectionSelectValue = document.getElementById("sectionSelectStudent").value;
 
     if (!studentSelect.value) return alert("Please select your section and student name first.");
     if (!subjectSelect.value) return alert("Please select an exam subject.");
@@ -895,194 +905,218 @@
     activeStudent = JSON.parse(studentSelect.value);
     currentExamName = subjectSelect.value;
 
+    const safeStudentKey = activeStudent.id.replace(/[\/.$\[\]#]/g, "_");
+
     try {
+      // 1. Check if student already submitted this exam
+      const existingResultSnap = await get(child(ref(db), `results/${currentExamName}/${activeStudent.section}/${safeStudentKey}`));
+      if (existingResultSnap.exists()) {
+        return alert("Access Denied: You have already completed and submitted this exam. Retakes are not permitted.");
+      }
+
+      // 2. Map section dropdown value to exact Firebase key structure under examConfig
+      let dbSectionKey = "";
+      if (sectionSelectValue === "Section_B_ECE") {
+        dbSectionKey = "Section B (Extension ECE)";
+      } else {
+        dbSectionKey = sectionSelectValue.replace(/_/g, " ");
+      }
+
+      // 3. Prompt student for section password validation
+      const enteredPassword = prompt(`Enter Exam Password for ${dbSectionKey}:`);
+      if (enteredPassword === null) return; // User cancelled
+
+      const passSnap = await get(child(ref(db), `examConfig/${dbSectionKey}`));
+      
+      if (!passSnap.exists()) {
+        return alert("Exam password has not been configured by the instructor yet.");
+      }
+
+      const correctPassword = passSnap.val().toString();
+
+      if (enteredPassword.trim() !== correctPassword) {
+        return alert("Incorrect exam password. Access denied.");
+      }
+
       const snap = await get(child(ref(db), `exams/${currentExamName}`));
-      if (!snap.exists()) return alert("No questions available for this subject.");
+      if (!snap.exists()) {
+        return alert("No questions available for this exam subject yet.");
+      }
 
-      rawLoadedQuestions = snap.val();
-      // Shuffle options for each question without altering correct values
-      rawLoadedQuestions.forEach(q => {
-        q.shuffledOptions = [...q.options].sort(() => Math.random() - 0.5);
-      });
-
+      const rawData = snap.val();
+      const questionArray = Array.isArray(rawData) ? rawData : Object.values(rawData);
+      
+      // Shuffle questions randomly for this student session
+      rawLoadedQuestions = shuffleArray(questionArray);
       totalQuestions = rawLoadedQuestions.length;
-      currentQuestionIndex = 0;
 
       document.getElementById("loginContainer").classList.add("hidden");
       document.getElementById("studentExamPage").classList.remove("hidden");
-
       document.getElementById("examTitle").innerText = currentExamName;
       document.getElementById("studentInfoDisplay").innerText = `${activeStudent.fName} ${activeStudent.lName} (${activeStudent.id})`;
 
-      examActive = true;
-      startTimer();
-      renderQuestion();
-      renderPalette();
-      setupCheatingDetection();
+      buildPalette();
+      loadQuestion(0);
+      startExamTimer();
+      monitorCheating();
 
     } catch (err) {
       console.error("Exam load error:", err);
-      alert("Failed to load exam. Please try again.");
+      alert("Error starting exam. Please check your connection.");
     }
   });
 
-  function renderQuestion() {
+  function loadQuestion(index) {
+    currentQuestionIndex = index;
+    const qData = rawLoadedQuestions[index];
     const container = document.getElementById("examQuestions");
-    const q = rawLoadedQuestions[currentQuestionIndex];
 
-    const isFlagged = flaggedQuestions.has(currentQuestionIndex);
-    const selectedVal = studentAnswers[currentQuestionIndex] || "";
-
-    let html = `
-      <div class="question-block">
-        <h3 style="margin-top:0;">Question ${currentQuestionIndex + 1} of ${totalQuestions}</h3>
-        <p style="font-size:16px; margin-bottom: 20px;">${q.question}</p>
-        <div>
-    `;
-
-    q.shuffledOptions.forEach((optText) => {
-      const isChecked = selectedVal === optText ? "checked" : "";
-      html += `
+    let optionsHtml = "";
+    qData.options.forEach((opt, idx) => {
+      if (!opt) return;
+      const isChecked = studentAnswers[index] === opt ? "checked" : "";
+      optionsHtml += `
         <label class="option-label">
-          <input type="radio" name="q_opt" value="${optText.replace(/"/g, '&quot;')}" ${isChecked}>
-          <span>${optText}</span>
+          <input type="radio" name="qOption" value="${opt}" ${isChecked} onchange="saveAnswer(${index}, '${opt.replace(/'/g, "\\'")}')">
+          <span>${opt}</span>
         </label>
       `;
     });
 
-    html += `
-        </div>
-        <div class="question-toolbar">
-          <button type="button" id="flagBtn" class="${isFlagged ? 'btn-warning' : 'btn-secondary'}" style="width:auto; margin:0;">
-            ${isFlagged ? '🚩 Flagged' : '🏳️ Flag for Review'}
+    const isFlagged = flaggedQuestions.has(index);
+
+    container.innerHTML = `
+      <div class="question-block">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+          <h3 style="margin-top:0; color:var(--exam-text);">Question ${index + 1} of ${totalQuestions}</h3>
+          <button type="button" class="btn-warning" style="width:auto; padding:4px 10px; font-size:12px; margin:0;" onclick="toggleFlag(${index})">
+            ${isFlagged ? '🚩 Flagged' : '🏳️ Flag Question'}
           </button>
         </div>
+        <p style="font-size:16px; font-weight:600; margin-bottom:15px; color:var(--exam-text);">${qData.question}</p>
+        <div>${optionsHtml}</div>
       </div>
     `;
 
-    container.innerHTML = html;
+    document.getElementById("prevBtn").disabled = index === 0;
+    document.getElementById("nextBtn").disabled = index === totalQuestions - 1;
 
-    container.querySelectorAll('input[name="q_opt"]').forEach(radio => {
-      radio.addEventListener('change', (e) => {
-        studentAnswers[currentQuestionIndex] = e.target.value;
-        renderPalette();
-        updateProgressBar();
-      });
-    });
-
-    document.getElementById("flagBtn").onclick = () => {
-      if (flaggedQuestions.has(currentQuestionIndex)) {
-        flaggedQuestions.delete(currentQuestionIndex);
-      } else {
-        flaggedQuestions.add(currentQuestionIndex);
-      }
-      renderQuestion();
-      renderPalette();
-    };
-
-    document.getElementById("prevBtn").disabled = currentQuestionIndex === 0;
-    document.getElementById("nextBtn").disabled = currentQuestionIndex === totalQuestions - 1;
+    updatePaletteUI();
     updateProgressBar();
   }
 
-  document.getElementById("prevBtn").onclick = () => {
-    if (currentQuestionIndex > 0) {
-      currentQuestionIndex--;
-      renderQuestion();
-      renderPalette();
+  window.saveAnswer = function(qIndex, answer) {
+    studentAnswers[qIndex] = answer;
+    updatePaletteUI();
+    updateProgressBar();
+  };
+
+  window.toggleFlag = function(qIndex) {
+    if (flaggedQuestions.has(qIndex)) {
+      flaggedQuestions.delete(qIndex);
+    } else {
+      flaggedQuestions.add(qIndex);
     }
+    loadQuestion(qIndex);
+  };
+
+  document.getElementById("prevBtn").onclick = () => {
+    if (currentQuestionIndex > 0) loadQuestion(currentQuestionIndex - 1);
   };
 
   document.getElementById("nextBtn").onclick = () => {
-    if (currentQuestionIndex < totalQuestions - 1) {
-      currentQuestionIndex++;
-      renderQuestion();
-      renderPalette();
-    }
+    if (currentQuestionIndex < totalQuestions - 1) loadQuestion(currentQuestionIndex + 1);
   };
 
-  function renderPalette() {
+  function buildPalette() {
     const grid = document.getElementById("questionPaletteGrid");
     grid.innerHTML = "";
-
     for (let i = 0; i < totalQuestions; i++) {
       const chip = document.createElement("button");
       chip.className = "palette-chip";
-      chip.innerText = i + 1;
-
-      if (i === currentQuestionIndex) chip.classList.add("active");
-      if (studentAnswers[i]) chip.classList.add("answered");
-      if (flaggedQuestions.has(i)) chip.classList.add("flagged");
-
-      chip.onclick = () => {
-        currentQuestionIndex = i;
-        renderQuestion();
-        renderPalette();
-      };
-
+      chip.textContent = i + 1;
+      chip.id = `chip-${i}`;
+      chip.onclick = () => loadQuestion(i);
       grid.appendChild(chip);
+    }
+  }
+
+  function updatePaletteUI() {
+    for (let i = 0; i < totalQuestions; i++) {
+      const chip = document.getElementById(`chip-${i}`);
+      if (!chip) continue;
+      chip.className = "palette-chip";
+
+      if (i === currentQuestionIndex) {
+        chip.classList.add("active");
+      }
+      if (studentAnswers[i] !== undefined) {
+        chip.classList.add("answered");
+      }
+      if (flaggedQuestions.has(i)) {
+        chip.classList.add("flagged");
+      }
     }
   }
 
   function updateProgressBar() {
     const answeredCount = Object.keys(studentAnswers).length;
-    const pct = Math.round((answeredCount / totalQuestions) * 100);
-    document.getElementById("examProgressBar").style.width = pct + "%";
+    const percentage = (answeredCount / totalQuestions) * 100;
+    document.getElementById("examProgressBar").style.width = `${percentage}%`;
   }
 
-  function startTimer() {
-    const display = document.getElementById("timerDisplay");
+  function startExamTimer() {
+    const timerDisplay = document.getElementById("timerDisplay");
     examTimer = setInterval(() => {
       if (timeRemaining <= 0) {
         clearInterval(examTimer);
-        alert("Time is up! Submitting your exam automatically.");
-        executeSubmission();
+        alert("Time is up! Your exam will be submitted automatically.");
+        submitExamFinal();
         return;
       }
       timeRemaining--;
-      const m = Math.floor(timeRemaining / 60);
-      const s = timeRemaining % 60;
-      display.innerText = `Time: ${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+      const mins = Math.floor(timeRemaining / 60);
+      const secs = timeRemaining % 60;
+      timerDisplay.innerText = `Time: ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }, 1000);
   }
 
-  // --- SUBMIT MODAL EVENTS ---
+  const submitModal = document.getElementById("submitModal");
+
   document.getElementById("triggerSubmitBtn").onclick = () => {
-    const answeredCount = Object.keys(studentAnswers).length;
-    const flaggedCount = flaggedQuestions.size;
-    const unansweredCount = totalQuestions - answeredCount;
+    const answered = Object.keys(studentAnswers).length;
+    const flagged = flaggedQuestions.size;
+    const unanswered = totalQuestions - answered;
 
-    document.getElementById("modalAnsweredCount").innerText = answeredCount;
-    document.getElementById("modalFlaggedCount").innerText = flaggedCount;
-    document.getElementById("modalUnansweredCount").innerText = unansweredCount;
+    document.getElementById("modalAnsweredCount").innerText = answered;
+    document.getElementById("modalFlaggedCount").innerText = flagged;
+    document.getElementById("modalUnansweredCount").innerText = unanswered;
 
-    document.getElementById("submitModal").classList.remove("hidden");
+    submitModal.classList.remove("hidden");
   };
 
   document.getElementById("cancelSubmitBtn").onclick = () => {
-    document.getElementById("submitModal").classList.add("hidden");
+    submitModal.classList.add("hidden");
   };
 
   document.getElementById("confirmSubmitBtn").onclick = () => {
-    document.getElementById("submitModal").classList.add("hidden");
-    executeSubmission();
+    submitModal.classList.add("hidden");
+    clearInterval(examTimer);
+    submitExamFinal();
   };
 
-  async function executeSubmission() {
-    examActive = false;
-    clearInterval(examTimer);
-
+  function submitExamFinal() {
     let score = 0;
     rawLoadedQuestions.forEach((q, idx) => {
-      if (studentAnswers[idx] && studentAnswers[idx] === q.correctAnswer) {
+      if (studentAnswers[idx] === q.correctAnswer) {
         score++;
       }
     });
 
-    const safeId = activeStudent.id.replace(/[\/.$\[\]#]/g, "_");
     const resultData = {
       studentId: activeStudent.id,
-      studentName: `${activeStudent.fName} ${activeStudent.lName}`,
+      firstName: activeStudent.fName,
+      lastName: activeStudent.lName,
       section: activeStudent.section,
       subject: currentExamName,
       score: score,
@@ -1090,101 +1124,129 @@
       submittedAt: serverTimestamp()
     };
 
-    try {
-      await set(ref(db, `results/${currentExamName}/${safeId}`), resultData);
-      document.getElementById("examMainContent").classList.add("hidden");
-      document.getElementById("finalScoreView").classList.remove("hidden");
-      document.getElementById("displayScoreValue").innerText = `${score} / ${totalQuestions}`;
-    } catch (err) {
-      console.error("Submission error:", err);
-      alert("Failed to transmit responses. Please notify your instructor.");
-    }
+    const safeStudentKey = activeStudent.id.replace(/[\/.$\[\]#]/g, "_");
+
+    set(ref(db, `results/${currentExamName}/${activeStudent.section}/${safeStudentKey}`), resultData)
+      .then(() => {
+        document.getElementById("examMainContent").classList.add("hidden");
+        document.getElementById("finalScoreView").classList.remove("hidden");
+        document.getElementById("displayScoreValue").innerText = `${score} / ${totalQuestions}`;
+      })
+      .catch(err => {
+        console.error("Error submitting score:", err);
+        alert("Failed to sync score to server. Please notify your instructor.");
+      });
   }
 
-  // --- SECURITY & VIOLATION LOGGING ---
-  function setupCheatingDetection() {
+  function monitorCheating() {
+    let violationCount = 0;
+    const cheatOverlay = document.getElementById("cheatOverlay");
+
     window.addEventListener("blur", () => {
-      if (!examActive) return;
-      logViolation("Window focus lost / switched tab");
-      document.getElementById("cheatOverlay").classList.remove("hidden");
+      if (document.getElementById("studentExamPage").classList.contains("hidden")) return;
+      violationCount++;
+      cheatOverlay.classList.remove("hidden");
+
+      const logData = {
+        studentId: activeStudent.id,
+        name: `${activeStudent.fName} ${activeStudent.lName}`,
+        section: activeStudent.section,
+        subject: currentExamName,
+        timestamp: serverTimestamp()
+      };
+      push(ref(db, `violations/${activeStudent.section}`), logData);
     });
+
+    document.getElementById("unlockExamBtn").onclick = async () => {
+      const pass = document.getElementById("unlockPassInput").value.trim();
+      try {
+        const snap = await get(child(ref(db), "adminConfig/instructorKey"));
+        const validPass = snap.exists() ? snap.val().toString() : "admin123";
+
+        if (pass === validPass) {
+          cheatOverlay.classList.add("hidden");
+          document.getElementById("unlockPassInput").value = "";
+        } else {
+          alert("Incorrect Instructor Passcode!");
+        }
+      } catch (e) {
+        alert("Error verifying unlock passcode.");
+      }
+    };
   }
-
-  async function logViolation(reason) {
-    if (!activeStudent) return;
-    const safeId = activeStudent.id.replace(/[\/.$\[\]#]/g, "_");
-    const logRef = push(ref(db, `violations/${safeId}`));
-    await set(logRef, {
-      studentName: `${activeStudent.fName} ${activeStudent.lName}`,
-      id: activeStudent.id,
-      reason: reason,
-      timestamp: serverTimestamp()
-    });
-  }
-
-  document.getElementById("unlockExamBtn").onclick = async () => {
-    const pass = document.getElementById("unlockPassInput").value;
-    const snap = await get(child(ref(db), "adminConfig/instructorKey"));
-    const validPass = snap.exists() ? snap.val().toString() : "admin123";
-
-    if (pass === validPass) {
-      document.getElementById("cheatOverlay").classList.add("hidden");
-      document.getElementById("unlockPassInput").value = "";
-    } else {
-      alert("Invalid instructor passcode!");
-    }
-  };
 
   function listenToViolations() {
+    const logsContainer = document.getElementById("violationLogs");
     onValue(ref(db, "violations"), (snapshot) => {
-      const container = document.getElementById("violationLogs");
-      container.innerHTML = "";
       if (!snapshot.exists()) {
-        container.innerHTML = "No security violations logged.";
+        logsContainer.innerHTML = "No security violations recorded.";
         return;
       }
-      snapshot.forEach(childSnap => {
-        childSnap.forEach(entrySnap => {
-          const v = entrySnap.val();
-          const p = document.createElement("p");
-          p.style.margin = "4px 0";
-          p.innerHTML = `⚠️ <b>${v.studentName}</b> (${v.id}): ${v.reason}`;
-          container.appendChild(p);
+      let html = "<ul>";
+      snapshot.forEach((sectionSnap) => {
+        sectionSnap.forEach((violationSnap) => {
+          const v = violationSnap.val();
+          html += `<li><b>[${v.section}]</b> ${v.name} (${v.studentId}) switched tabs during ${v.subject}</li>`;
         });
       });
+      html += "</ul>";
+      logsContainer.innerHTML = html;
     });
   }
 
   async function fetchAndRenderResults() {
     const subject = document.getElementById("resultFilterSelect").value;
     const section = document.getElementById("resultSectionFilterSelect").value;
-    const container = document.getElementById("studentResults");
+    const resultsContainer = document.getElementById("studentResults");
 
-    container.innerHTML = "<p>Loading live results...</p>";
+    resultsContainer.innerHTML = "<p>Loading results...</p>";
 
     try {
       const snap = await get(child(ref(db), `results/${subject}`));
       if (!snap.exists()) {
-        container.innerHTML = "<p>No results logged for this selection.</p>";
+        resultsContainer.innerHTML = "<p>No results found for this subject.</p>";
         return;
       }
 
-      let html = `<table><thead><tr><th>ID</th><th>Name</th><th>Section</th><th>Score</th></tr></thead><tbody>`;
-      snap.forEach(rSnap => {
-        const res = rSnap.val();
-        if (section === "ALL" || res.section === section) {
-          html += `<tr><td>${res.studentId}</td><td>${res.studentName}</td><td>${res.section}</td><td>${res.score}/${res.total}</td></tr>`;
-        }
+      let tableHtml = `
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Section</th>
+              <th>Score</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      let recordCount = 0;
+      snap.forEach((secSnap) => {
+        const secName = secSnap.key;
+        if (section !== "ALL" && secName !== section) return;
+
+        secSnap.forEach((studentSnap) => {
+          const r = studentSnap.val();
+          recordCount++;
+          tableHtml += `
+            <tr>
+              <td>${r.studentId}</td>
+              <td>${r.firstName} ${r.lastName}</td>
+              <td>${r.section}</td>
+              <td><b>${r.score} / ${r.total}</b></td>
+            </tr>
+          `;
+        });
       });
-      html += "</tbody></table>";
-      container.innerHTML = html;
+
+      tableHtml += `</tbody></table>`;
+      resultsContainer.innerHTML = recordCount > 0 ? tableHtml : "<p>No results match the selected filter.</p>";
     } catch (err) {
-      container.innerHTML = "<p>Failed to retrieve results.</p>";
+      console.error("Error loading results:", err);
+      resultsContainer.innerHTML = "<p>Error loading results from server.</p>";
     }
   }
-
-  document.getElementById("resultFilterSelect").addEventListener("change", fetchAndRenderResults);
-  document.getElementById("resultSectionFilterSelect").addEventListener("change", fetchAndRenderResults);
 </script>
 </body>
 </html>
