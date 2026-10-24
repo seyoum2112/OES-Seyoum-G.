@@ -14,7 +14,7 @@
     --accent: #7df5cb;
     --danger: #e74c3c;
     --warning: #f39c12;
-    --info: #2980b9;
+    --info: #2774a8;
     --card-border: #e0e0e0;
   }
 
@@ -102,7 +102,7 @@
   }
 
   .btn-secondary { background: var(--info) !important; }
-  .btn-warning { background: var(--warning) !important; color: #111 !important; }
+  .btn-warning { background: var(--warning) !important; color: #7b7373 !important; }
   .btn-danger { background: var(--danger) !important; }
   .btn-success { background: #27ae60 !important; }
 
@@ -115,7 +115,7 @@
     top: 0;
     z-index: 100;
     background: #ffffff;
-    color: #111;
+    color: #f3eaea;
     border-bottom: 2px solid var(--card-border);
     padding: 12px 20px;
     border-radius: 15px 15px 0 0;
@@ -123,7 +123,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    box-shadow: 0 4px 10px rgba(41, 40, 40, 0.05);
   }
 
   .sticky-header h2 { margin: 0; font-size: 16px; color: var(--primary); }
@@ -157,7 +157,7 @@
   #studentExamPage {
     background: var(--exam-bg) !important;
     color: var(--exam-text);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 10px 30px rgba(208, 200, 200, 0.15);
   }
 
   .exam-grid-container {
@@ -409,8 +409,8 @@
     <label>Select Section:</label>
     <select id="sectionSelectStudent">
       <option value="">-- Choose Section --</option>
-      <option value="Section_A">Section A (Mechanical)</option>
-      <option value="Section_B">Section B (Extension EME)</option>
+      <option value="Section_A">Section A (EME)</option>
+      <option value="Section_B">Section B (EME)</option>
       <option value="Section_B_ECE">Section B (Extension ECE)</option>
       <option value="Section_C">Section C (Electrical)</option>
       <option value="Section_D">Section D (Electrical)</option>
@@ -472,8 +472,8 @@
       <h3>Import Student List (CSV)</h3>
       <label>Target Section:</label>
       <select id="csvSectionSelect">
-          <option value="Section_A">Section A (Mechanical)</option>
-          <option value="Section_B">Section B (Extension EME)</option>
+          <option value="Section_A">Section A (EME)</option>
+          <option value="Section_B">Section B (EME)</option>
           <option value="Section_B_ECE">Section B (Extension ECE)</option>
           <option value="Section_C">Section C (Electrical)</option>
           <option value="Section_D">Section D (Electrical)</option>
@@ -505,8 +505,8 @@
           <label style="font-size: 12px; opacity: 0.9;">Filter by Section:</label>
           <select id="resultSectionFilterSelect">
               <option value="ALL">All Sections</option>
-              <option value="Section_A">Section A (Mechanical)</option>
-              <option value="Section_B">Section B (Extension EME)</option>
+              <option value="Section_A">Section A (EME)</option>
+              <option value="Section_B">Section B (EME)</option>
               <option value="Section_B_ECE">Section B (Extension ECE)</option>
               <option value="Section_C">Section C (Electrical)</option>
               <option value="Section_D">Section D (Electrical)</option>
@@ -609,7 +609,7 @@
   let rawLoadedQuestions = [];
   let studentAnswers = {};
   let flaggedQuestions = new Set();
-  let timeRemaining = 2400; // 40 minutes standard
+  let timeRemaining = 1800; // 30 minutes standard
 
   window.openPortalView = function(type) {
     document.getElementById("roleSelectionView").classList.add("hidden");
