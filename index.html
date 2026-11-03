@@ -207,15 +207,6 @@
   .option-label:hover { background: #f1f5f9; }
   .option-label input[type="radio"] { width: 18px; height: 18px; margin: 0; flex-shrink: 0; }
 
-  .question-toolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 15px;
-    padding-top: 10px;
-    border-top: 1px solid #e0e0e0;
-  }
-
   .palette-box {
     background: #f8f9fa;
     padding: 15px;
@@ -415,6 +406,7 @@
   <!-- STEP 2B: STUDENT LOGIN FORM -->
   <div id="studentLoginForm" class="management-card hidden" style="margin-top: 20px;">
     <h3 style="margin-top:0;">Student Portal</h3>
+    
     <label>Select Section:</label>
     <select id="sectionSelectStudent">
       <option value="">-- Choose Section --</option>
@@ -439,6 +431,15 @@
       <option value="Turbomachinery">Turbomachinery</option>
     </select>
 
+    <label>Select Exam Session:</label>
+    <select id="studentSessionSelect">
+      <option value="Morning">Session 1</option>
+      <option value="Afternoon">Session 2</option>
+    </select>
+
+    <label>Session Access Password:</label>
+    <input type="password" id="studentSessionPassword" placeholder="Enter session password provided by instructor">
+
     <button id="studentLoginBtn" class="btn-success" style="margin-top: 15px;">Start Exam</button>
     <button class="btn-secondary" onclick="backToPortalSelect()" style="margin-top: 10px;">Back</button>
   </div>
@@ -453,14 +454,35 @@
 
   <!-- Dashboard Tab Controls -->
   <div class="dashboard-tabs">
-    <button class="tab-btn active" onclick="switchDashboardTab('tab-questions')">📝 Question Bank</button>
+    <button class="tab-btn active" onclick="switchDashboardTab('tab-questions')">📝 Question Bank & Sessions</button>
     <button class="tab-btn" onclick="switchDashboardTab('tab-student list')">📁 Upload Student List</button>
     <button class="tab-btn" onclick="switchDashboardTab('tab-results')">📊 Live Results</button>
     <button class="tab-btn" onclick="switchDashboardTab('tab-violations')">🚨 Security Logs</button>
   </div>
 
-  <!-- TAB 1: QUESTION EDITOR -->
+  <!-- TAB 1: QUESTION EDITOR & SESSION PASSWORDS -->
   <div id="tab-questions" class="tab-content">
+    
+    <!-- SESSION PASSWORDS CONFIGURATION CARD -->
+    <div class="management-card" style="border: 1px dashed var(--accent);">
+      <h3 style="color: var(--accent); margin-top:0;"><i class="fa-solid fa-key"></i> Exam Session Access Passwords</h3>
+      <p style="font-size: 12px; opacity: 0.9; margin-bottom: 15px;">Configure unique access passcodes for Session 1 and Session 2 so students in different sessions log in securely.</p>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+        <div>
+          <label style="font-size: 13px; color: #cbd5e1;">Session 1 Password:</label>
+          <input type="text" id="configMorningPass" value="morning123" style="background:#fff; color:#000; margin: 6px 0;">
+        </div>
+        <div>
+          <label style="font-size: 13px; color: #cbd5e1;">Session 2 Password:</label>
+          <input type="text" id="configAfternoonPass" value="afternoon123" style="background:#fff; color:#000; margin: 6px 0;">
+        </div>
+      </div>
+      <button id="saveSessionPassBtn" class="btn-success" style="width: auto; padding: 10px 20px; margin-top: 10px;">Save Session Passwords</button>
+      <div id="sessionPassStatusMsg" style="margin-top: 8px; font-weight: bold; font-size: 13px;"></div>
+    </div>
+
+    <!-- QUESTION MANAGER -->
     <div class="management-card">
       <h3>Exam Question Manager</h3>
       <select id="examSelect">
@@ -477,7 +499,7 @@
         </label>
         <input type="file" id="examDocFileInput" accept=".docx, .pdf" style="background: #fff; color: #000; margin: 8px 0;">
         <p style="font-size: 11px; opacity: 0.8; margin: 0 0 10px 0;">
-          Supports questions formatted like: <b>1. Question text...</b>, options <b>A. Option A...</b>, <b>B. Option B...</b>, <b>C. Option C...</b>, <b>D. Option D...</b> and optional answer lines (e.g., <b>Answer: B</b>).
+          Supports questions formatted like: <b>Question text...</b>, options <b>A. Option A...</b>, <b>B. Option B...</b>, <b>C. Option C...</b>, <b>D. Option D...</b> and optional answer lines (e.g., <b>Answer: B</b>).
         </p>
         <button id="parseExamDocBtn" class="btn-secondary" style="margin: 0; width: auto; padding: 10px 20px; font-size: 14px;">Parse & Load Questions</button>
         <div id="examDocStatusMessage" style="margin-top: 8px; font-weight: bold; font-size: 13px;"></div>
@@ -666,10 +688,48 @@
     if (passInput === validPass) {
       document.getElementById("loginContainer").classList.add("hidden");
       document.getElementById("instructorPanel").classList.remove("hidden");
+      
+      loadSessionPasswordConfigs();
+
       listenToViolations();
       fetchAndRenderResults();
     } else {
       alert("Incorrect Instructor Password! (Default is admin123)");
+    }
+  };
+
+  async function loadSessionPasswordConfigs() {
+    try {
+      const mSnap = await get(child(ref(db), "adminConfig/morningKey"));
+      if (mSnap.exists()) document.getElementById("configMorningPass").value = mSnap.val();
+
+      const aSnap = await get(child(ref(db), "adminConfig/afternoonKey"));
+      if (aSnap.exists()) document.getElementById("configAfternoonPass").value = aSnap.val();
+    } catch(e) {
+      console.warn("Could not load session passwords from DB, using defaults.");
+    }
+  }
+
+  document.getElementById("saveSessionPassBtn").onclick = async () => {
+    const morningPass = document.getElementById("configMorningPass").value.trim();
+    const afternoonPass = document.getElementById("configAfternoonPass").value.trim();
+    const statusMsg = document.getElementById("sessionPassStatusMsg");
+
+    if (!morningPass || !afternoonPass) {
+      statusMsg.style.color = "#e74c3c";
+      statusMsg.innerText = "Both session passwords must be provided.";
+      return;
+    }
+
+    try {
+      await set(ref(db, "adminConfig/morningKey"), morningPass);
+      await set(ref(db, "adminConfig/afternoonKey"), afternoonPass);
+      statusMsg.style.color = "#27ae60";
+      statusMsg.innerText = "Session access passwords updated successfully!";
+    } catch (err) {
+      console.error("Error saving session passwords:", err);
+      statusMsg.style.color = "#e74c3c";
+      statusMsg.innerText = "Failed to save session passwords to database.";
     }
   };
 
@@ -774,351 +834,210 @@
       </select>
     `;
 
-    const inputs = card.querySelectorAll('.q-opt');
-    const select = card.querySelector('.q-correct');
-    inputs.forEach((input, index) => {
-      input.addEventListener('input', () => {
-        select.options[index].value = input.value;
-      });
-    });
-
     card.querySelector(".remove-q-btn").onclick = () => card.remove();
     questionsContainer.appendChild(card);
   }
 
-  addNewQuestionBtn.addEventListener("click", () => {
-    if (!examSelect.value) {
-      return alert("Please select a subject first!");
-    }
-    renderQuestionCard();
-  });
+  addNewQuestionBtn.onclick = () => renderQuestionCard();
 
-  saveExamBtn.addEventListener("click", async () => {
-    const selectedSubject = examSelect.value;
-    if (!selectedSubject) return alert("Select an exam subject first.");
+  saveExamBtn.onclick = async () => {
+    const subject = examSelect.value;
+    if (!subject) return alert("Please select a subject first.");
 
     const cards = questionsContainer.querySelectorAll(".q-editor-card");
     const questionList = [];
 
     cards.forEach(card => {
-      const question = card.querySelector(".q-text").value.trim();
-      const optionInputs = card.querySelectorAll(".q-opt");
-      const options = Array.from(optionInputs).map(opt => opt.value.trim());
-      const correctAnswer = card.querySelector(".q-correct").value.trim();
+      const qText = card.querySelector(".q-text").value.trim();
+      const optInputs = card.querySelectorAll(".q-opt");
+      const opts = Array.from(optInputs).map(inp => inp.value.trim());
+      const correct = card.querySelector(".q-correct").value;
 
-      if (question && correctAnswer) {
-        questionList.push({ question, options, correctAnswer });
+      if (qText) {
+        questionList.push({
+          question: qText,
+          options: opts,
+          correctAnswer: correct
+        });
       }
     });
 
     try {
-      await set(ref(db, `exams/${selectedSubject}`), questionList);
-      alert(`Successfully saved ${questionList.length} questions to ${selectedSubject}!`);
+      await set(ref(db, `exams/${subject}`), questionList);
+      alert("Exam questions saved successfully!");
     } catch (err) {
       console.error("Error saving exam:", err);
-      alert("Failed to save questions to database.");
+      alert("Failed to save exam questions.");
     }
-  });
+  };
 
-  // --- EXAM DOCUMENT PARSING ENGINE FOR YOUR QUESTION FORMAT ---
-  const examDocFileInput = document.getElementById("examDocFileInput");
-  const parseExamDocBtn = document.getElementById("parseExamDocBtn");
-  const examDocStatusMsg = document.getElementById("examDocStatusMessage");
-
-  parseExamDocBtn.addEventListener("click", () => {
-    const file = examDocFileInput.files[0];
-    if (!file) {
-      examDocStatusMsg.style.color = "#e74c3c";
-      examDocStatusMsg.innerText = "Please select a Word (.docx) or PDF (.pdf) file first.";
-      return;
-    }
-
-    if (!examSelect.value) {
-      examDocStatusMsg.style.color = "#e74c3c";
-      examDocStatusMsg.innerText = "Please choose a subject dropdown above before parsing.";
-      return;
-    }
-
-    examDocStatusMsg.style.color = "#38bdf8";
-    examDocStatusMsg.innerText = "Reading and parsing document content...";
-
-    const reader = new FileReader();
-    const fileName = file.name.toLowerCase();
-
-    if (fileName.endsWith(".docx")) {
-      reader.onload = function(e) {
-        const arrayBuffer = e.target.result;
-        mammoth.extractRawText({ arrayBuffer: arrayBuffer })
-          .then(result => {
-            parseAndLoadThermodynamicsQuestions(result.value);
-          })
-          .catch(err => {
-            console.error("Word parse error:", err);
-            examDocStatusMsg.style.color = "#e74c3c";
-            examDocStatusMsg.innerText = "Failed to parse Word document: " + err.message;
-          });
-      };
-      reader.readAsArrayBuffer(file);
-
-    } else if (fileName.endsWith(".pdf")) {
-      reader.onload = async function(e) {
-        try {
-          const typedarray = new Uint8Array(e.target.result);
-          const pdf = await pdfjsLib.getDocument({ data: typedarray }).promise;
-          let fullText = "";
-          for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            let pageText = textContent.items.map(item => item.str).join(" ");
-            fullText += pageText + "\n";
-          }
-          parseAndLoadThermodynamicsQuestions(fullText);
-        } catch (err) {
-          console.error("PDF parse error:", err);
-          examDocStatusMsg.style.color = "#e74c3c";
-          examDocStatusMsg.innerText = "Failed to parse PDF document: " + err.message;
-        }
-      };
-      reader.readAsArrayBuffer(file);
-    } else {
-      examDocStatusMsg.style.color = "#e74c3c";
-      examDocStatusMsg.innerText = "Unsupported file format. Please upload a .docx or .pdf file.";
-    }
-  });
-
-  function parseAndLoadThermodynamicsQuestions(rawText) {
-    const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-    let parsed = [];
-    let currentQ = null;
-    let currentOptions = {};
-    let currentAns = "";
-
-    const qStartRegex = /^(\d+)[\.\)]\s*(.*)/;
-    const optRegex = /^([A-D])[\.\)]\s*(.*)/i;
-    const ansRegex = /^(answer|ans|correct)\s*[:\-]?\s*([A-D])/i;
-
-    function flushCurrent() {
-      if (currentQ) {
-        const optsArray = [
-          currentOptions["A"] || "",
-          currentOptions["B"] || "",
-          currentOptions["C"] || "",
-          currentOptions["D"] || ""
-        ];
-        
-        let resolvedAns = "";
-        if (currentAns && currentOptions[currentAns]) {
-          resolvedAns = currentOptions[currentAns];
-        } else {
-          resolvedAns = optsArray[0];
-        }
-
-        parsed.push({
-          question: currentQ,
-          options: optsArray,
-          correctAnswer: resolvedAns
-        });
-      }
-    }
-
-    let lastMode = ""; // "Q", "A", "B", "C", "D", "ANS"
-
-    for (let line of lines) {
-      if (line.toLowerCase().includes("multiple-choice questions")) continue;
-
-      const qMatch = line.match(qStartRegex);
-      const optMatch = line.match(optRegex);
-      const ansMatch = line.match(ansRegex);
-
-      if (qMatch) {
-        flushCurrent();
-        currentQ = qMatch[2].trim();
-        currentOptions = {};
-        currentAns = "";
-        lastMode = "Q";
-      } else if (optMatch) {
-        const letter = optMatch[1].toUpperCase();
-        const text = optMatch[2].trim();
-        currentOptions[letter] = text;
-        lastMode = letter;
-      } else if (ansMatch) {
-        currentAns = ansMatch[2].toUpperCase();
-        lastMode = "ANS";
-      } else {
-        // Line continuation handling
-        if (lastMode === "Q" && currentQ) {
-          currentQ += " " + line;
-        } else if (["A", "B", "C", "D"].includes(lastMode) && currentOptions[lastMode] !== undefined) {
-          currentOptions[lastMode] += " " + line;
-        }
-      }
-    }
-    flushCurrent();
-
-    if (parsed.length === 0) {
-      examDocStatusMsg.style.color = "#e74c3c";
-      examDocStatusMsg.innerText = "No valid questions detected. Ensure format is: '1. Question', 'A. Option A', etc.";
-      return;
-    }
-
-    questionsContainer.innerHTML = "";
-    parsed.forEach(q => renderQuestionCard(q));
-
-    examDocStatusMsg.style.color = "#27ae60";
-    examDocStatusMsg.innerText = `Successfully loaded ${parsed.length} questions and mapped choices A, B, C, D directly!`;
-    examDocFileInput.value = "";
-  }
-  // --- END EXAM DOCUMENT UPLOAD LOGIC ---
-
-  const csvFileInput = document.getElementById("csvFileInput");
-  const csvSectionSelect = document.getElementById("csvSectionSelect");
-  const uploadCsvBtn = document.getElementById("uploadCsvBtn");
-  const statusMsg = document.getElementById("uploadStatusMessage");
-
-  uploadCsvBtn.addEventListener("click", () => {
-    const file = csvFileInput.files[0];
-    const targetSection = csvSectionSelect.value;
-
-    if (!file) {
-      statusMsg.style.color = "#e74c3c";
-      statusMsg.innerText = "Please select a CSV file to upload.";
-      return;
-    }
-
-    statusMsg.style.color = "#38bdf8";
-    statusMsg.innerText = "Reading file content...";
-
-    const reader = new FileReader();
-
-    reader.onload = function(e) {
-      const text = e.target.result;
-      const parsedStudents = parseCSV(text);
-      const studentCount = Object.keys(parsedStudents).length;
-
-      if (studentCount === 0) {
-        statusMsg.style.color = "#e74c3c";
-        statusMsg.innerText = "Could not parse any valid student records from the CSV file.";
+  function listenToViolations() {
+    const vRef = ref(db, "violations");
+    onValue(vRef, (snapshot) => {
+      const container = document.getElementById("violationLogs");
+      container.innerHTML = "";
+      if (!snapshot.exists()) {
+        container.innerText = "No security violations recorded.";
         return;
       }
-
-      statusMsg.innerText = `Uploading ${studentCount} students to studentList/${targetSection}...`;
-
-      set(ref(db, `studentList/${targetSection}`), parsedStudents)
-        .then(() => {
-          statusMsg.style.color = "#27ae60";
-          statusMsg.innerText = `Successfully uploaded ${studentCount} students to ${targetSection}!`;
-          csvFileInput.value = ""; 
-        })
-        .catch((error) => {
-          console.error("Firebase upload error:", error);
-          statusMsg.style.color = "#e74c3c";
-          statusMsg.innerText = `Upload Failed: ${error.message}`;
-        });
-    };
-
-    reader.onerror = function() {
-      statusMsg.style.color = "#e74c3c";
-      statusMsg.innerText = "Error reading file from disk.";
-    };
-
-    reader.readAsText(file);
-  });
-
-  function parseCSV(text) {
-    const lines = text.split(/\r?\n/);
-    const studentsMap = {};
-
-    lines.forEach((line, index) => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
-
-      const cols = trimmed
-        .split(/[,;\t]+/)
-        .map(col => col.replace(/^["']|["']$/g, '').trim());
-
-      if (cols.length < 3) return;
-
-      const rawId = cols[0];
-      const firstName = cols[1];
-      const lastName = cols[2];
-
-      if (index === 0 && (rawId.toLowerCase().includes("id") || firstName.toLowerCase().includes("name"))) {
-        return;
-      }
-
-      const safeKey = rawId.replace(/[\/.$\[\]#]/g, "_");
-
-      if (safeKey) {
-        studentsMap[safeKey] = {
-          id: rawId,
-          firstName: firstName,
-          lastName: lastName
-        };
-      }
+      const logs = snapshot.val();
+      Object.values(logs).forEach(log => {
+        const div = document.createElement("div");
+        div.style.padding = "8px";
+        div.style.margin = "4px 0";
+        div.style.background = "rgba(231,76,60,0.1)";
+        div.style.borderLeft = "3px solid var(--danger)";
+        div.innerHTML = `<strong>${log.studentName}</strong> (${log.section}) - ${log.reason} at ${new Date(log.timestamp).toLocaleTimeString()}`;
+        container.appendChild(div);
+      });
     });
-
-    return studentsMap;
   }
 
-  function shuffleArray(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [array[i], array[j]] = [array[j], array[i]];
-    }
-    return array;
-  }
+  async function fetchAndRenderResults() {
+    const subject = document.getElementById("resultFilterSelect").value;
+    const section = document.getElementById("resultSectionFilterSelect").value;
+    const container = document.getElementById("studentResults");
 
-  // Student Login and Exam Initiation Handler
-  document.getElementById("studentLoginBtn").addEventListener("click", async () => {
-    const studentSelect = document.getElementById("studentSelect");
-    const subjectSelect = document.getElementById("studentExamSelect");
-    const sectionSelect = document.getElementById("sectionSelectStudent");
-
-    if (!sectionSelect.value) return alert("Please select your section.");
-    if (!studentSelect.value) return alert("Please select your name.");
-    if (!subjectSelect.value) return alert("Please select an exam subject.");
+    container.innerHTML = "<p>Loading results...</p>";
 
     try {
-      activeStudent = JSON.parse(studentSelect.value);
-    } catch(e) {
-      return alert("Invalid student selection.");
-    }
-
-    currentExamName = subjectSelect.value;
-
-    try {
-      const snap = await get(child(ref(db), `exams/${currentExamName}`));
+      const snap = await get(child(ref(db), `results/${subject}`));
       if (!snap.exists()) {
-        return alert("No questions found for this exam subject. Contact your instructor.");
+        container.innerHTML = "<p>No results found for this subject.</p>";
+        return;
       }
 
-      rawLoadedQuestions = snap.val();
-      if (!Array.isArray(rawLoadedQuestions) || rawLoadedQuestions.length === 0) {
-        return alert("The exam question list is empty.");
-      }
+      const resultsData = snap.val();
+      let html = `<table><thead><tr><th>Student ID</th><th>Name</th><th>Section</th><th>Session</th><th>Score</th><th>Submitted At</th></tr></thead><tbody>`;
+      
+      let hasRows = false;
+      Object.values(resultsData).forEach(res => {
+        if (section === "ALL" || res.section === section) {
+          hasRows = true;
+          html += `<tr>
+            <td>${res.studentId}</td>
+            <td>${res.studentName}</td>
+            <td>${res.section}</td>
+            <td>${res.session}</td>
+            <td><strong>${res.score} / ${res.total}</strong></td>
+            <td>${new Date(res.timestamp).toLocaleString()}</td>
+          </tr>`;
+        }
+      });
 
-      rawLoadedQuestions = shuffleArray(rawLoadedQuestions);
+      html += `</tbody></table>`;
+      container.innerHTML = hasRows ? html : "<p>No results match the selected filter.</p>";
+    } catch (err) {
+      console.error("Error fetching results:", err);
+      container.innerHTML = "<p>Error loading results.</p>";
+    }
+  }
+
+  document.getElementById("resultFilterSelect").onchange = fetchAndRenderResults;
+  document.getElementById("resultSectionFilterSelect").onchange = fetchAndRenderResults;
+
+  document.getElementById("studentLoginBtn").onclick = async () => {
+    const sectionVal = document.getElementById("sectionSelectStudent").value;
+    const studentVal = document.getElementById("studentSelect").value;
+    const examName = document.getElementById("studentExamSelect").value;
+    const sessionVal = document.getElementById("studentSessionSelect").value;
+    const passwordVal = document.getElementById("studentSessionPassword").value.trim();
+
+    if (!sectionVal || !studentVal || !examName || !sessionVal || !passwordVal) {
+      return alert("Please fill in all login fields and enter the session access password.");
+    }
+
+    let expectedPass = sessionVal === "Morning" ? "morning123" : "afternoon123";
+    try {
+      const keyPath = sessionVal === "Morning" ? "adminConfig/morningKey" : "adminConfig/afternoonKey";
+      const snap = await get(child(ref(db), keyPath));
+      if (snap.exists()) {
+        expectedPass = snap.val().toString();
+      }
+    } catch (e) {
+      console.warn("Using fallback password check.");
+    }
+
+    if (passwordVal !== expectedPass) {
+      return alert("Incorrect session access password provided.");
+    }
+
+    activeStudent = JSON.parse(studentVal);
+    currentExamName = examName;
+
+    try {
+      const qSnap = await get(child(ref(db), `exams/${examName}`));
+      if (!qSnap.exists()) {
+        return alert("No questions are currently available for this exam.");
+      }
+      rawLoadedQuestions = qSnap.val();
       totalQuestions = rawLoadedQuestions.length;
-      currentQuestionIndex = 0;
-      studentAnswers = {};
-      flaggedQuestions.clear();
 
       document.getElementById("loginContainer").classList.add("hidden");
       document.getElementById("studentExamPage").classList.remove("hidden");
-      document.getElementById("examTitle").textContent = currentExamName;
-      document.getElementById("studentInfoDisplay").textContent = `${activeStudent.fName} ${activeStudent.lName} (${activeStudent.id})`;
+      document.getElementById("examTitle").innerText = examName;
+      document.getElementById("studentInfoDisplay").innerText = `${activeStudent.fName} ${activeStudent.lName} (${activeStudent.id})`;
 
-      buildQuestionPalette();
-      renderCurrentQuestion();
-      startExamTimer(1800);
-      initCheatDetection();
-      examActive = true;
-
+      startExamSession();
     } catch (err) {
       console.error("Error starting exam:", err);
-      alert("Failed to load exam questions from database.");
+      alert("Failed to load exam questions.");
     }
-  });
+  };
+
+  function startExamSession() {
+    examActive = true;
+    currentQuestionIndex = 0;
+    studentAnswers = {};
+    flaggedQuestions.clear();
+
+    buildQuestionPalette();
+    renderCurrentQuestion();
+    startTimer();
+  }
+
+  function startTimer() {
+    const display = document.getElementById("timerDisplay");
+    examTimer = setInterval(() => {
+      if (timeRemaining <= 0) {
+        clearInterval(examTimer);
+        alert("Time is up! Submitting your exam automatically.");
+        submitExam();
+        return;
+      }
+      timeRemaining--;
+      let mins = Math.floor(timeRemaining / 60);
+      let secs = timeRemaining % 60;
+      display.innerText = `Time: ${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }, 1000);
+  }
+
+  function buildQuestionPalette() {
+    const grid = document.getElementById("questionPaletteGrid");
+    grid.innerHTML = "";
+    for (let i = 0; i < totalQuestions; i++) {
+      const chip = document.createElement("button");
+      chip.className = "palette-chip";
+      chip.innerText = i + 1;
+      chip.id = `palette-chip-${i}`;
+      chip.onclick = () => jumpToQuestion(i);
+      grid.appendChild(chip);
+    }
+  }
+
+  function updatePaletteChips() {
+    for (let i = 0; i < totalQuestions; i++) {
+      const chip = document.getElementById(`palette-chip-${i}`);
+      if (!chip) continue;
+      chip.className = "palette-chip";
+      if (i === currentQuestionIndex) chip.classList.add("active");
+      if (flaggedQuestions.has(i)) {
+        chip.classList.add("flagged");
+      } else if (studentAnswers[i] !== undefined) {
+        chip.classList.add("answered");
+      }
+    }
+  }
 
   function renderCurrentQuestion() {
     const container = document.getElementById("examQuestions");
@@ -1127,52 +1046,61 @@
     let optionsHtml = "";
     q.options.forEach((opt, idx) => {
       if (!opt) return;
-      const optLetter = String.fromCharCode(65 + idx);
       const isChecked = studentAnswers[currentQuestionIndex] === opt ? "checked" : "";
       optionsHtml += `
         <label class="option-label">
-          <input type="radio" name="q_${currentQuestionIndex}" value="${opt.replace(/"/g, '&quot;')}" ${isChecked} onchange="saveStudentAnswer(${currentQuestionIndex}, this.value)">
-          <strong>${optLetter})</strong> ${opt}
+          <input type="radio" name="examOption" value="${opt}" ${isChecked}>
+          <span>${opt}</span>
         </label>
       `;
     });
 
     const isFlagged = flaggedQuestions.has(currentQuestionIndex);
-    const flagBtnText = isFlagged ? "🚩 Unflag Question" : "🏳️ Flag for Review";
-    const flagBtnClass = isFlagged ? "btn-warning" : "btn-secondary";
+    const flagBtnText = isFlagged ? "🚩 Unflag Question" : "🏳️ Flag Question";
 
     container.innerHTML = `
       <div class="question-block">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
-          <span style="font-weight:bold; color:var(--info);">Question ${currentQuestionIndex + 1} of ${totalQuestions}</span>
-          <button type="button" class="${flagBtnClass}" style="width:auto; padding:6px 12px; margin:0; font-size:12px;" onclick="toggleFlagQuestion(${currentQuestionIndex})">${flagBtnText}</button>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h4 style="margin-top:0; color:var(--primary);">Question ${currentQuestionIndex + 1} of ${totalQuestions}</h4>
+          <button id="flagBtn" class="btn-warning" style="width:auto; padding:6px 12px; margin:0; font-size:12px;">${flagBtnText}</button>
         </div>
-        <p style="font-size: 16px; font-weight: 500; margin-top:0;">${q.question}</p>
-        <div style="margin-top: 15px;">${optionsHtml}</div>
+        <p style="font-size:16px; font-weight:500; margin-bottom:20px;">${q.question}</p>
+        <div id="optionsContainer">${optionsHtml}</div>
       </div>
     `;
 
-    document.getElementById("prevBtn").disabled = currentQuestionIndex === 0;
-    document.getElementById("nextBtn").disabled = currentQuestionIndex === totalQuestions - 1;
-    updateProgressBar();
+    document.querySelectorAll("input[name='examOption']").forEach(radio => {
+      radio.onchange = (e) => {
+        studentAnswers[currentQuestionIndex] = e.target.value;
+        updatePaletteChips();
+        updateProgressBar();
+      };
+    });
+
+    document.getElementById("flagBtn").onclick = () => {
+      if (flaggedQuestions.has(currentQuestionIndex)) {
+        flaggedQuestions.delete(currentQuestionIndex);
+      } else {
+        flaggedQuestions.add(currentQuestionIndex);
+      }
+      renderCurrentQuestion();
+      updatePaletteChips();
+    };
+
     updatePaletteChips();
+    updateProgressBar();
   }
 
-  window.saveStudentAnswer = function(qIndex, answerValue) {
-    studentAnswers[qIndex] = answerValue;
-    updatePaletteChips();
-    updateProgressBar();
-  };
+  function updateProgressBar() {
+    const answeredCount = Object.keys(studentAnswers).length;
+    const pct = (answeredCount / totalQuestions) * 100;
+    document.getElementById("examProgressBar").style.width = `${pct}%`;
+  }
 
-  window.toggleFlagQuestion = function(qIndex) {
-    if (flaggedQuestions.has(qIndex)) {
-      flaggedQuestions.delete(qIndex);
-    } else {
-      flaggedQuestions.add(qIndex);
-    }
+  function jumpToQuestion(idx) {
+    currentQuestionIndex = idx;
     renderCurrentQuestion();
-    updatePaletteChips();
-  };
+  }
 
   document.getElementById("prevBtn").onclick = () => {
     if (currentQuestionIndex > 0) {
@@ -1188,69 +1116,14 @@
     }
   };
 
-  function buildQuestionPalette() {
-    const grid = document.getElementById("questionPaletteGrid");
-    grid.innerHTML = "";
-    for (let i = 0; i < totalQuestions; i++) {
-      const chip = document.createElement("button");
-      chip.className = "palette-chip";
-      chip.textContent = i + 1;
-      chip.onclick = () => {
-        currentQuestionIndex = i;
-        renderCurrentQuestion();
-      };
-      grid.appendChild(chip);
-    }
-  }
-
-  function updatePaletteChips() {
-    const chips = document.querySelectorAll(".palette-chip");
-    chips.forEach((chip, idx) => {
-      chip.classList.remove("active", "answered", "flagged");
-      if (idx === currentQuestionIndex) {
-        chip.classList.add("active");
-      }
-      if (studentAnswers[idx] !== undefined) {
-        chip.classList.add("answered");
-      }
-      if (flaggedQuestions.has(idx)) {
-        chip.classList.add("flagged");
-      }
-    });
-  }
-
-  function updateProgressBar() {
-    const answeredCount = Object.keys(studentAnswers).length;
-    const percent = (answeredCount / totalQuestions) * 100;
-    document.getElementById("examProgressBar").style.width = `${percent}%`;
-  }
-
-  function startExamTimer(durationSeconds) {
-    timeRemaining = durationSeconds;
-    const timerDisplay = document.getElementById("timerDisplay");
-
-    examTimer = setInterval(() => {
-      const minutes = Math.floor(timeRemaining / 60);
-      const seconds = timeRemaining % 60;
-      timerDisplay.textContent = `Time: ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-
-      if (timeRemaining <= 0) {
-        clearInterval(examTimer);
-        alert("Time is up! Submitting your exam automatically.");
-        submitExam(true);
-      }
-      timeRemaining--;
-    }, 1000);
-  }
-
   document.getElementById("triggerSubmitBtn").onclick = () => {
     const answeredCount = Object.keys(studentAnswers).length;
     const flaggedCount = flaggedQuestions.size;
     const unansweredCount = totalQuestions - answeredCount;
 
-    document.getElementById("modalAnsweredCount").textContent = answeredCount;
-    document.getElementById("modalFlaggedCount").textContent = flaggedCount;
-    document.getElementById("modalUnansweredCount").textContent = unansweredCount;
+    document.getElementById("modalAnsweredCount").innerText = answeredCount;
+    document.getElementById("modalFlaggedCount").innerText = flaggedCount;
+    document.getElementById("modalUnansweredCount").innerText = unansweredCount;
     document.getElementById("submitModal").classList.remove("hidden");
   };
 
@@ -1260,203 +1133,75 @@
 
   document.getElementById("confirmSubmitBtn").onclick = () => {
     document.getElementById("submitModal").classList.add("hidden");
-    submitExam(false);
+    submitExam();
   };
 
-  async function submitExam(isAutoSubmit) {
+  async function submitExam() {
     if (!examActive) return;
     examActive = false;
     clearInterval(examTimer);
 
     let score = 0;
     rawLoadedQuestions.forEach((q, idx) => {
-      const studentAns = studentAnswers[idx];
-      if (studentAns !== undefined && studentAns.trim() === q.correctAnswer.trim()) {
+      if (studentAnswers[idx] && studentAnswers[idx].trim() === q.correctAnswer.trim()) {
         score++;
       }
     });
 
     const resultPayload = {
       studentId: activeStudent.id,
-      firstName: activeStudent.fName,
-      lastName: activeStudent.lName,
+      studentName: `${activeStudent.fName} ${activeStudent.lName}`,
       section: activeStudent.section,
-      subject: currentExamName,
+      session: document.getElementById("studentSessionSelect").value,
       score: score,
       total: totalQuestions,
-      submittedAt: serverTimestamp(),
-      autoSubmitted: isAutoSubmit
-    };
-
-    try {
-      const safeStudentKey = activeStudent.id.replace(/[\/.$\[\]#]/g, "_");
-      await set(ref(db, `results/${currentExamName}/${activeStudent.section}/${safeStudentKey}`), resultPayload);
-
-      document.getElementById("examMainContent").classList.add("hidden");
-      document.getElementById("finalScoreView").classList.remove("hidden");
-      document.getElementById("displayScoreValue").textContent = `${score} / ${totalQuestions}`;
-    } catch (err) {
-      console.error("Error submitting exam results:", err);
-      alert("Error saving exam results to server.");
-    }
-  }
-
-  function initCheatDetection() {
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden && examActive) {
-        triggerCheatViolation("Left exam window / Tab switch detected");
-      }
-    });
-
-    window.addEventListener("blur", () => {
-      if (examActive) {
-        triggerCheatViolation("Lost window focus");
-      }
-    });
-  }
-
-  async function triggerCheatViolation(reason) {
-    if (!examActive || !activeStudent) return;
-    document.getElementById("cheatOverlay").classList.remove("hidden");
-
-    const violationPayload = {
-      studentId: activeStudent.id,
-      name: `${activeStudent.fName} ${activeStudent.lName}`,
-      section: activeStudent.section,
-      subject: currentExamName,
-      reason: reason,
       timestamp: serverTimestamp()
     };
 
     try {
-      const violationRef = push(ref(db, `violations/${currentExamName}`));
-      await set(violationRef, violationPayload);
+      await push(ref(db, `results/${currentExamName}`), resultPayload);
+    } catch (err) {
+      console.error("Error submitting exam result:", err);
+    }
+
+    document.getElementById("examMainContent").classList.add("hidden");
+    document.getElementById("finalScoreView").classList.remove("hidden");
+    document.getElementById("displayScoreValue").innerText = `${score} / ${totalQuestions}`;
+  }
+
+  // Security focus tracking
+  window.addEventListener("blur", async () => {
+    if (!examActive || !activeStudent) return;
+    document.getElementById("cheatOverlay").classList.remove("hidden");
+    
+    try {
+      const violationPayload = {
+        studentId: activeStudent.id,
+        studentName: `${activeStudent.fName} ${activeStudent.lName}`,
+        section: activeStudent.section,
+        reason: "Left browser window / Focus lost",
+        timestamp: serverTimestamp()
+      };
+      await push(ref(db, "violations"), violationPayload);
     } catch (err) {
       console.error("Error logging violation:", err);
     }
-  }
+  });
 
   document.getElementById("unlockExamBtn").onclick = async () => {
-    const passInput = document.getElementById("unlockPassInput").value.trim();
-    if (!passInput) return alert("Enter instructor password.");
-
-    let validPass = "admin123";
+    const pass = document.getElementById("unlockPassInput").value.trim();
+    let instructorKey = "admin123";
     try {
       const snap = await get(child(ref(db), "adminConfig/instructorKey"));
-      if (snap.exists()) {
-        validPass = snap.val().toString();
-      }
-    } catch (err) {
-      console.warn("Using default password.", err);
-    }
+      if (snap.exists()) instructorKey = snap.val().toString();
+    } catch (e) {}
 
-    if (passInput === validPass) {
+    if (pass === instructorKey) {
       document.getElementById("unlockPassInput").value = "";
       document.getElementById("cheatOverlay").classList.add("hidden");
     } else {
-      alert("Incorrect password!");
+      alert("Incorrect instructor password for unlocking.");
     }
-  };
-
-  async function fetchAndRenderResults() {
-    const subject = document.getElementById("resultFilterSelect").value;
-    const section = document.getElementById("resultSectionFilterSelect").value;
-    const resultsContainer = document.getElementById("studentResults");
-
-    resultsContainer.innerHTML = "<p>Loading results...</p>";
-
-    try {
-      const snap = await get(child(ref(db), `results/${subject}`));
-      if (!snap.exists()) {
-        resultsContainer.innerHTML = "<p>No results found for this subject.</p>";
-        return;
-      }
-
-      const sectionsData = snap.val();
-      let allRows = "";
-
-      Object.keys(sectionsData).forEach(secKey => {
-        if (section !== "ALL" && secKey !== section) return;
-        const students = sectionsData[secKey];
-
-        Object.values(students).forEach(res => {
-          allRows += `
-            <tr>
-              <td>${res.studentId}</td>
-              <td>${res.firstName} ${res.lastName}</td>
-              <td>${res.section}</td>
-              <td><strong>${res.score} / ${res.total}</strong></td>
-              <td>${res.autoSubmitted ? '⚠️ Auto (Timeout)' : '✔️ Normal'}</td>
-            </tr>
-          `;
-        });
-      });
-
-      if (!allRows) {
-        resultsContainer.innerHTML = "<p>No student results match the selected filter.</p>";
-        return;
-      }
-
-      resultsContainer.innerHTML = `
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Full Name</th>
-              <th>Section</th>
-              <th>Score</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>${allRows}</tbody>
-        </table>
-      `;
-    } catch (err) {
-      console.error("Error fetching results:", err);
-      resultsContainer.innerHTML = "<p>Error loading results.</p>";
-    }
-  }
-
-  document.getElementById("resultFilterSelect").addEventListener("change", fetchAndRenderResults);
-  document.getElementById("resultSectionFilterSelect").addEventListener("change", fetchAndRenderResults);
-
-  function listenToViolations() {
-    const logsContainer = document.getElementById("violationLogs");
-    const subjects = ["Engineering Thermodynamics", "Fluid mechanics", "Turbomachinery"];
-
-    subjects.forEach(subj => {
-      onValue(ref(db, `violations/${subj}`), (snapshot) => {
-        if (!snapshot.exists()) return;
-        const data = snapshot.val();
-        let html = "";
-        Object.values(data).forEach(v => {
-          html += `<div style="padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.1);">
-            <strong>[${v.subject}]</strong> ${v.name} (${v.studentId} - ${v.section}): ${v.reason}
-          </div>`;
-        });
-        logsContainer.innerHTML = html;
-      });
-    });
-  }
-
-  document.getElementById("downloadExcelBtn").onclick = () => {
-    const table = document.querySelector("#studentResults table");
-    if (!table) return alert("No results table available to download.");
-    
-    let csv = [];
-    const rows = table.querySelectorAll("tr");
-    rows.forEach(row => {
-      let cols = row.querySelectorAll("td, th");
-      let data = Array.from(cols).map(c => `"${c.innerText}"`);
-      csv.push(data.join(","));
-    });
-
-    const blob = new Blob([csv.join("\n")], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.setAttribute("href", url);
-    a.setAttribute("download", `Exam_Results_${document.getElementById("resultFilterSelect").value}.csv`);
-    a.click();
   };
 </script>
 </body>
