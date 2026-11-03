@@ -499,7 +499,7 @@
         </label>
         <input type="file" id="examDocFileInput" accept=".docx, .pdf" style="background: #fff; color: #000; margin: 8px 0;">
         <p style="font-size: 11px; opacity: 0.8; margin: 0 0 10px 0;">
-          Supports questions formatted like: <b>Question text...</b>, options <b>A. Option A...</b>, <b>B. Option B...</b>, <b>C. Option C...</b>, <b>D. Option D...</b> and optional answer lines (e.g., <b>Answer: B</b>).
+          Supports questions formatted like: <b>Question text...</b>, options <b>A. Option A...</b>, <b>B. Option B...</b>, <b>C. Option C...</b>, <b>D. Option D...</b> and optional answer lines (e.g., <b>Answer: B</b> or <b>Correct answer: B</b>).
         </p>
         <button id="parseExamDocBtn" class="btn-secondary" style="margin: 0; width: auto; padding: 10px 20px; font-size: 14px;">Parse & Load Questions</button>
         <div id="examDocStatusMessage" style="margin-top: 8px; font-weight: bold; font-size: 13px;"></div>
@@ -839,6 +839,116 @@
   }
 
   addNewQuestionBtn.onclick = () => renderQuestionCard();
+
+  // PARSE EXAM DOCUMENT (.docx or .pdf)
+  document.getElementById("parseExamDocBtn").onclick = async () => {
+    const fileInput = document.getElementById("examDocFileInput");
+    const statusMsg = document.getElementById("examDocStatusMessage");
+    
+    if (!fileInput.files || fileInput.files.length === 0) {
+      statusMsg.style.color = "#e74c3c";
+      statusMsg.innerText = "Please select a Word (.docx) or PDF (.pdf) file first.";
+      return;
+    }
+
+    const file = fileInput.files[0];
+    const fileName = file.name.toLowerCase();
+    statusMsg.style.color = "#38bdf8";
+    statusMsg.innerText = "Parsing document...";
+
+    try {
+      let text = "";
+      if (fileName.endsWith(".docx")) {
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        text = result.value;
+      } else if (fileName.endsWith(".pdf")) {
+        const typedarray = new Uint8Array(await file.arrayBuffer());
+        const pdf = await pdfjsLib.getDocument(typedarray).promise;
+        let fullText = "";
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = content.items.map(item => item.str).join("\n");
+          fullText += pageText + "\n";
+        }
+        text = fullText;
+      } else {
+        throw new Error("Unsupported file format.");
+      }
+
+      const parsedQuestions = parseExamTextToQuestions(text);
+      if (parsedQuestions.length === 0) {
+        statusMsg.style.color = "#e74c3c";
+        statusMsg.innerText = "No questions found. Check formatting (e.g. 1. Question, A., B., C., D., Answer: X).";
+        return;
+      }
+
+      questionsContainer.innerHTML = "";
+      parsedQuestions.forEach(q => renderQuestionCard(q));
+
+      statusMsg.style.color = "#27ae60";
+      statusMsg.innerText = `Successfully parsed and loaded ${parsedQuestions.length} questions! Review and click 'Save All Question Changes'.`;
+    } catch (err) {
+      console.error("Error parsing document:", err);
+      statusMsg.style.color = "#e74c3c";
+      statusMsg.innerText = "Error parsing file. Please ensure it is a valid .docx or .pdf file.";
+    }
+  };
+
+  function parseExamTextToQuestions(text) {
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+    const questions = [];
+    let currentQ = null;
+    let currentOpts = [];
+    let currentAnswer = "";
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+      // Check if line starts a question (e.g., "1.", "1 -", "Q1.")
+      if (/^\d+[\.\-\)]\s+/.test(line)) {
+        if (currentQ) {
+          questions.push({
+            question: currentQ,
+            options: currentOpts.length >= 4 ? currentOpts.slice(0, 4) : [...currentOpts, "", "", "", ""].slice(0, 4),
+            correctAnswer: currentAnswer || (currentOpts[0] || "")
+          });
+        }
+        currentQ = line.replace(/^\d+[\.\-\)]\s+/, "");
+        currentOpts = [];
+        currentAnswer = "";
+      } else if (/^[A-D][\.\-\)]\s+/i.test(line)) {
+        let optText = line.replace(/^[A-D][\.\-\)]\s+/i, "");
+        currentOpts.push(optText);
+      } else if (/^(Answer|Correct answer|Correct Option)[\s\:]+/i.test(line)) {
+        let ansMatch = line.match(/([A-D])/i);
+        if (ansMatch && currentOpts.length > 0) {
+          let letter = ansMatch[1].toUpperCase();
+          let idx = letter === 'A' ? 0 : letter === 'B' ? 1 : letter === 'C' ? 2 : 3;
+          if (currentOpts[idx] !== undefined) {
+            currentAnswer = currentOpts[idx];
+          }
+        }
+      } else {
+        // Continuation of question or option
+        if (currentOpts.length > 0) {
+          currentOpts[currentOpts.length - 1] += " " + line;
+        } else if (currentQ) {
+          currentQ += " " + line;
+        }
+      }
+    }
+
+    if (currentQ) {
+      questions.push({
+        question: currentQ,
+        options: currentOpts.length >= 4 ? currentOpts.slice(0, 4) : [...currentOpts, "", "", "", ""].slice(0, 4),
+        correctAnswer: currentAnswer || (currentOpts[0] || "")
+      });
+    }
+
+    return questions;
+  }
 
   saveExamBtn.onclick = async () => {
     const subject = examSelect.value;
