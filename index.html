@@ -353,8 +353,8 @@
 <div id="cheatOverlay" class="modal-overlay hidden">
     <div class="lock-box">
         <h1 style="color:var(--danger); margin-top:0; font-size: 24px;">EXAM LOCKED</h1>
-        <p>Security violation detected: You left the window or altered focus.</p>
-        <p><strong>Instructor passcode required:</strong></p>
+        <p>Security violation detected: You left the window, minimized, or refreshed/reloaded the browser.</p>
+        <p><strong>Instructor passcode required to unlock:</strong></p>
         <input type="password" id="unlockPassInput" placeholder="Enter Instructor Password" style="color:#000;">
         <button id="unlockExamBtn" class="btn-success" style="margin-top:10px;">Unlock & Resume</button>
     </div>
@@ -905,7 +905,6 @@
 
     for (let i = 0; i < lines.length; i++) {
       let line = lines[i];
-      // Check if line starts a question (e.g., "1.", "1 -", "Q1.")
       if (/^\d+[\.\-\)]\s+/.test(line)) {
         if (currentQ) {
           questions.push({
@@ -930,7 +929,6 @@
           }
         }
       } else {
-        // Continuation of question or option
         if (currentOpts.length > 0) {
           currentOpts[currentOpts.length - 1] += " " + line;
         } else if (currentQ) {
@@ -1057,6 +1055,27 @@
       return alert("Please fill in all login fields and enter the session access password.");
     }
 
+    let studentObj;
+    try {
+      studentObj = JSON.parse(studentVal);
+    } catch (e) {
+      return alert("Invalid student selection.");
+    }
+
+    // CHECK IF STUDENT ALREADY COMPLETED/SUBMITTED THIS EXAM
+    try {
+      const resultsSnap = await get(child(ref(db), `results/${examName}`));
+      if (resultsSnap.exists()) {
+        const allResults = resultsSnap.val();
+        const alreadySubmitted = Object.values(allResults).some(res => res.studentId === studentObj.id);
+        if (alreadySubmitted) {
+          return alert("Access Denied: You have already submitted this exam. Exam retakes are not allowed.");
+        }
+      }
+    } catch (err) {
+      console.error("Error checking previous exam submissions:", err);
+    }
+
     let expectedPass = sessionVal === "Morning" ? "morning123" : "afternoon123";
     try {
       const keyPath = sessionVal === "Morning" ? "adminConfig/morningKey" : "adminConfig/afternoonKey";
@@ -1072,7 +1091,7 @@
       return alert("Incorrect session access password provided.");
     }
 
-    activeStudent = JSON.parse(studentVal);
+    activeStudent = studentObj;
     currentExamName = examName;
 
     try {
@@ -1082,6 +1101,13 @@
       }
       rawLoadedQuestions = qSnap.val();
       totalQuestions = rawLoadedQuestions.length;
+
+      // Mark exam session active in sessionStorage so refresh/reload triggers persistent lock
+      sessionStorage.setItem("examInProgress", JSON.stringify({
+        student: activeStudent,
+        examName: currentExamName,
+        lockedDueToViolation: false
+      }));
 
       document.getElementById("loginContainer").classList.add("hidden");
       document.getElementById("studentExamPage").classList.remove("hidden");
@@ -1094,6 +1120,50 @@
       alert("Failed to load exam questions.");
     }
   };
+
+  // Check if student was previously taking an exam and reloaded/refreshed page (persistent lock enforcement)
+  window.addEventListener("DOMContentLoaded", async () => {
+    const storedExam = sessionStorage.getItem("examInProgress");
+    if (storedExam) {
+      try {
+        const data = JSON.parse(storedExam);
+        if (data && data.student && data.examName) {
+          activeStudent = data.student;
+          currentExamName = data.examName;
+
+          // Load questions so the interface can render if unlocked
+          const qSnap = await get(child(ref(db), `exams/${currentExamName}`));
+          if (qSnap.exists()) {
+            rawLoadedQuestions = qSnap.val();
+            totalQuestions = rawLoadedQuestions.length;
+          }
+
+          document.getElementById("loginContainer").classList.add("hidden");
+          document.getElementById("studentExamPage").classList.remove("hidden");
+          document.getElementById("examTitle").innerText = currentExamName;
+          document.getElementById("studentInfoDisplay").innerText = `${activeStudent.fName} ${activeStudent.lName} (${activeStudent.id})`;
+
+          // Instantly trigger violation lock due to browser refresh/reload attempt
+          document.getElementById("cheatOverlay").classList.remove("hidden");
+          
+          try {
+            const violationPayload = {
+              studentId: activeStudent.id,
+              studentName: `${activeStudent.fName} ${activeStudent.lName}`,
+              section: activeStudent.section,
+              reason: "Browser refresh / Reload attempt detected",
+              timestamp: serverTimestamp()
+            };
+            await push(ref(db, "violations"), violationPayload);
+          } catch (e) {
+            console.warn("Could not log refresh violation", e);
+          }
+        }
+      } catch (err) {
+        console.error("Error restoring session state", err);
+      }
+    }
+  });
 
   function startExamSession() {
     examActive = true;
@@ -1151,6 +1221,7 @@
 
   function renderCurrentQuestion() {
     const container = document.getElementById("examQuestions");
+    if (!rawLoadedQuestions || rawLoadedQuestions.length === 0) return;
     const q = rawLoadedQuestions[currentQuestionIndex];
 
     let optionsHtml = "";
@@ -1250,6 +1321,7 @@
     if (!examActive) return;
     examActive = false;
     clearInterval(examTimer);
+    sessionStorage.removeItem("examInProgress"); // clear active session so no persistent lock on completion
 
     let score = 0;
     rawLoadedQuestions.forEach((q, idx) => {
@@ -1279,7 +1351,7 @@
     document.getElementById("displayScoreValue").innerText = `${score} / ${totalQuestions}`;
   }
 
-  // Security focus tracking
+  // Security focus tracking (Window Blur / Minimize / Switch tab detection)
   window.addEventListener("blur", async () => {
     if (!examActive || !activeStudent) return;
     document.getElementById("cheatOverlay").classList.remove("hidden");
@@ -1289,7 +1361,7 @@
         studentId: activeStudent.id,
         studentName: `${activeStudent.fName} ${activeStudent.lName}`,
         section: activeStudent.section,
-        reason: "Left browser window / Focus lost",
+        reason: "Left browser window / Minimized / Focus lost",
         timestamp: serverTimestamp()
       };
       await push(ref(db, "violations"), violationPayload);
@@ -1309,6 +1381,12 @@
     if (pass === instructorKey) {
       document.getElementById("unlockPassInput").value = "";
       document.getElementById("cheatOverlay").classList.add("hidden");
+      // If questions weren't loaded yet on refresh unlock, make sure view is initialized
+      if (!examActive && activeStudent && totalQuestions > 0) {
+        examActive = true;
+        renderCurrentQuestion();
+        if (!examTimer) startTimer();
+      }
     } else {
       alert("Incorrect instructor password for unlocking.");
     }
