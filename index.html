@@ -940,7 +940,7 @@
     reader.readAsText(file);
   };
 
-  // Fetch results and view submissions with Answer Trace Audit support
+  // Fetch results and view submissions with Answer Trace Audit support & safe timestamp parsing
   async function fetchAndRenderResults() {
     const subject = document.getElementById("resultFilterSelect").value;
     const sectionFilter = document.getElementById("resultSectionFilterSelect").value;
@@ -949,13 +949,12 @@
     resultsContainer.innerHTML = "<p>Loading results...</p>";
 
     try {
-      // Load current question bank for auditing comparisons
       const qSnap = await get(child(ref(db), `exams/${subject}`));
       window.currentExamQuestionsForAudit = qSnap.exists() ? qSnap.val() : [];
 
       const snap = await get(child(ref(db), `submissions/${subject}`));
       if (!snap.exists()) {
-        resultsContainer.innerHTML = "<p>No submissions found for this subject.</p>";
+        resultsContainer.innerHTML = "<p>No submissions found for this subject yet.</p>";
         return;
       }
 
@@ -966,22 +965,30 @@
       Object.entries(window.allSubmissionsCache).forEach(([subKey, sub]) => {
         if (sectionFilter === "ALL" || sub.section === sectionFilter) {
           hasData = true;
+          let timeFormatted = "N/A";
+          if (sub.timestamp) {
+            const parsedTime = typeof sub.timestamp === "number" ? sub.timestamp : Date.parse(sub.timestamp);
+            if (!isNaN(parsedTime)) {
+              timeFormatted = new Date(parsedTime).toLocaleString();
+            }
+          }
+
           html += `<tr>
-            <td>${sub.studentId}</td>
-            <td>${sub.studentName}</td>
-            <td>${sub.section}</td>
-            <td><strong>${sub.score} / ${sub.total}</strong></td>
-            <td>${new Date(sub.timestamp).toLocaleString()}</td>
+            <td>${sub.studentId || "N/A"}</td>
+            <td>${sub.studentName || "N/A"}</td>
+            <td>${sub.section || "N/A"}</td>
+            <td><strong>${sub.score !== undefined ? sub.score : 0} / ${sub.total !== undefined ? sub.total : 0}</strong></td>
+            <td>${timeFormatted}</td>
             <td><button onclick="openAuditModal('${subKey}', '${subject}')" class="btn-secondary" style="width:auto; padding:6px 12px; margin:0;">View Detailed Answer Trace</button></td>
           </tr>`;
         }
       });
 
       html += `</tbody></table>`;
-      resultsContainer.innerHTML = hasData ? html : "<p>No submissions match the selected filter.</p>";
+      resultsContainer.innerHTML = hasData ? html : "<p>No submissions match the selected filter section.</p>";
     } catch (err) {
       console.error("Error fetching results:", err);
-      resultsContainer.innerHTML = "<p>Error loading student results.</p>";
+      resultsContainer.innerHTML = `<p style="color:var(--danger);">Error loading student results: ${err.message}</p>`;
     }
   }
 
